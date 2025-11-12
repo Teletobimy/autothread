@@ -69,7 +69,7 @@ count = st.number_input(
     "게시 횟수", min_value=1, max_value=10, value=5, step=1, format="%d"
 )
 interval_seconds = st.number_input(
-    "게시 간격(초)", min_value=0, max_value=600, value=60, step=5, format="%d"
+    "게시 간격(초)", min_value=0, max_value=6000, value=60, step=5, format="%d"
 )
 
 
