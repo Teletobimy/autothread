@@ -58,8 +58,13 @@ PDRN 클렌징: 순하면서도 효과적인 세정을 돕는 거품 클렌저.
 """
 
 
-import os, json, requests
+import json
+import os
+import time
 import sys
+from typing import Callable, List, Optional
+
+import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -79,6 +84,16 @@ load_dotenv()
 
 BASE = "https://graph.threads.net/v1.0"
 
+Logger = Optional[Callable[[str], None]]
+
+
+def _emit(message: str, logger: Logger = None) -> None:
+    """Helper to send messages to either stdout or a provided logger."""
+    if logger:
+        logger(message)
+    else:
+        print(message)
+
 def get_token():
     """환경 변수에서 토큰을 가져옵니다."""
     token = os.getenv('LONG_LIVED_ACCESS_TOKEN')
@@ -86,7 +101,7 @@ def get_token():
         raise ValueError("LONG_LIVED_ACCESS_TOKEN이 .env 파일에 설정되지 않았습니다.")
     return token.strip().strip('"').strip("'")  # 따옴표 제거
 
-def generate_text_with_gpt(topic=None, style="engaging", max_length=500):
+def generate_text_with_gpt(topic=None, style="engaging", max_length=500, logger: Logger = None):
     """
     GPT를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
     
@@ -153,11 +168,11 @@ def generate_text_with_gpt(topic=None, style="engaging", max_length=500):
         elif content.startswith("'") and content.endswith("'"):
             content = content[1:-1]
         
-        print(f"✅ GPT 콘텐츠 생성 완료 ({len(content)}자)")
+        _emit(f"✅ GPT 콘텐츠 생성 완료 ({len(content)}자)", logger)
         return content
         
     except Exception as e:
-        print(f"❌ GPT 콘텐츠 생성 중 오류 발생: {e}")
+        _emit(f"❌ GPT 콘텐츠 생성 중 오류 발생: {e}", logger)
         raise
 
 def me(token=None):
@@ -192,7 +207,27 @@ def get_permalink(media_id, token=None):
     r.raise_for_status()
     return r.json()["permalink"]
 
-def post_gpt_generated_text(topic=None, style="engaging", max_length=500, token=None):
+def _post_text_to_threads(threads_user_id: str, text: str, token: str, logger: Logger = None):
+    """Create, publish, and return metadata for a single Threads post."""
+    _emit("📦 컨테이너 생성 중...", logger)
+    creation_id = create_text_container(threads_user_id, text, token=token)
+
+    _emit("🚀 Threads에 게시 중...", logger)
+    media_id = publish_container(threads_user_id, creation_id, token=token)
+
+    _emit("🔗 Permalink 가져오는 중...", logger)
+    permalink = get_permalink(media_id, token=token)
+
+    return {
+        "media_id": media_id,
+        "creation_id": creation_id,
+        "permalink": permalink,
+        "text": text,
+        "user_id": threads_user_id,
+    }
+
+
+def post_gpt_generated_text(topic=None, style="engaging", max_length=500, token=None, logger: Logger = None):
     """
     GPT로 텍스트를 생성하고 Threads에 게시하는 전체 플로우를 실행합니다.
     
@@ -206,70 +241,122 @@ def post_gpt_generated_text(topic=None, style="engaging", max_length=500, token=
         dict: 게시 결과 (media_id, permalink 등 포함)
     """
     # 1단계: GPT로 텍스트 생성
-    print("🤖 GPT로 텍스트 생성 중...")
-    text = generate_text_with_gpt(topic=topic, style=style, max_length=max_length)
-    print(f"생성된 텍스트: {text[:100]}...")
-    
+    _emit("🤖 GPT로 텍스트 생성 중...", logger)
+    text = generate_text_with_gpt(topic=topic, style=style, max_length=max_length, logger=logger)
+    _emit(f"생성된 텍스트: {text[:100]}...", logger)
+
     # 2단계: Threads 사용자 정보 가져오기
     if token is None:
         token = get_token()
-    print("📋 Threads 사용자 정보 확인 중...")
+    _emit("📋 Threads 사용자 정보 확인 중...", logger)
     user_info = me(token=token)
     threads_user_id = user_info["id"]
-    print(f"사용자 ID: {threads_user_id} (@{user_info.get('username', 'N/A')})")
-    
-    # 3단계: 컨테이너 생성
-    print("📦 컨테이너 생성 중...")
-    creation_id = create_text_container(threads_user_id, text, token=token)
-    
-    # 4단계: 게시
-    print("🚀 Threads에 게시 중...")
-    media_id = publish_container(threads_user_id, creation_id, token=token)
-    
-    # 5단계: Permalink 가져오기
-    print("🔗 Permalink 가져오는 중...")
-    permalink = get_permalink(media_id, token=token)
-    
-    result = {
-        "media_id": media_id,
-        "creation_id": creation_id,
-        "permalink": permalink,
-        "text": text,
-        "user_id": threads_user_id
-    }
-    
-    print(f"\n✅ 게시 완료!")
-    print(f"📝 Media ID: {media_id}")
-    print(f"🔗 Permalink: {permalink}")
-    
+    username = user_info.get('username', 'N/A')
+    _emit(f"사용자 ID: {threads_user_id} (@{username})", logger)
+
+    # 3~5단계: 게시 및 링크 반환
+    result = _post_text_to_threads(threads_user_id, text, token, logger=logger)
+
+    _emit("\n✅ 게시 완료!", logger)
+    _emit(f"📝 Media ID: {result['media_id']}", logger)
+    _emit(f"🔗 Permalink: {result['permalink']}", logger)
+
     return result
 
+
+def post_multiple_gpt_texts(
+    topic=None,
+    style="engaging",
+    max_length=500,
+    count=5,
+    interval_seconds=60,
+    token=None,
+    logger: Logger = None,
+) -> List[dict]:
+    """
+    지정된 횟수만큼 Threads에 GPT 게시물을 순차적으로 업로드합니다.
+
+    Args:
+        topic (str, optional): 각 게시물에 대한 프롬프트 주제.
+        style (str): 콘텐츠 스타일.
+        max_length (int): 게시물 최대 길이.
+        count (int): 게시할 게시물 수.
+        interval_seconds (int): 게시 사이 지연(초).
+        token (str, optional): Threads 액세스 토큰.
+        logger (callable, optional): 로그 메시지를 처리할 콜백.
+
+    Returns:
+        List[dict]: 각 게시물의 결과 정보 목록.
+    """
+    if count < 1:
+        raise ValueError("count는 1 이상이어야 합니다.")
+
+    if interval_seconds < 0:
+        raise ValueError("interval_seconds는 0 이상이어야 합니다.")
+
+    if token is None:
+        token = get_token()
+
+    _emit("📋 Threads 사용자 정보 확인 중...", logger)
+    user_info = me(token=token)
+    threads_user_id = user_info["id"]
+    username = user_info.get('username', 'N/A')
+    _emit(f"사용자 ID: {threads_user_id} (@{username})", logger)
+
+    results = []
+
+    for idx in range(count):
+        _emit(f"\n===== 게시 {idx + 1}/{count} 시작 =====", logger)
+        _emit("🤖 GPT로 텍스트 생성 중...", logger)
+        text = generate_text_with_gpt(topic=topic, style=style, max_length=max_length, logger=logger)
+        _emit(f"생성된 텍스트: {text[:100]}...", logger)
+
+        result = _post_text_to_threads(threads_user_id, text, token, logger=logger)
+        result["sequence"] = idx + 1
+        result["username"] = username
+        results.append(result)
+
+        _emit(f"✅ 게시 {idx + 1}/{count} 완료! Permalink: {result['permalink']}", logger)
+
+        if idx < count - 1 and interval_seconds > 0:
+            _emit(f"⏳ 다음 게시까지 {interval_seconds}초 대기합니다...", logger)
+            time.sleep(interval_seconds)
+
+    _emit("\n🎉 모든 게시가 완료되었습니다!", logger)
+    return results
+
 if __name__ == "__main__":
-    import sys
-    
-    # 명령줄 인자 처리
-    if len(sys.argv) > 1:
-        # 주제가 제공된 경우 GPT로 생성해서 게시
-        topic = sys.argv[1]
-        print(f"🎯 주제: {topic}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Threads에 GPT 생성 콘텐츠를 자동 게시합니다.")
+    parser.add_argument("topic", nargs="?", help="GPT가 생성할 콘텐츠 주제 (미입력 시 기본 테스트 모드 실행)")
+    parser.add_argument("--style", default="engaging", help="GPT 콘텐츠 스타일 (기본값: engaging)")
+    parser.add_argument("--max-length", type=int, default=500, help="콘텐츠 최대 글자 수 (기본값: 500)")
+    parser.add_argument("--count", type=int, default=5, help="게시할 게시물 수 (기본값: 5)")
+    parser.add_argument("--interval", dest="interval_seconds", type=int, default=60, help="게시 간격(초) (기본값: 60)")
+    args = parser.parse_args()
+
+    if args.topic:
+        print(f"🎯 주제: {args.topic}")
         print("=" * 60)
-        result = post_gpt_generated_text(topic=topic)
+        post_multiple_gpt_texts(
+            topic=args.topic,
+            style=args.style,
+            max_length=args.max_length,
+            count=args.count,
+            interval_seconds=args.interval_seconds,
+        )
     else:
-        # 기본 테스트: 수동 텍스트로 게시
         print("=" * 60)
-        print("📝 기본 테스트 모드 (수동 텍스트)")
+        print("📝 기본 테스트 모드 (수동 텍스트 한 번 게시)")
         print("=" * 60)
-        m = me()
-        uid = m["id"]
-        print("✅ me:", m)
+        token = get_token()
+        user = me(token=token)
+        uid = user["id"]
+        print("✅ me:", user)
 
-        creation_id = create_text_container(uid, "Hello from API ✨")
-        print("🧩 creation_id:", creation_id)
+        result = _post_text_to_threads(uid, "Hello from API ✨", token)
+        print("🚀 published media_id:", result["media_id"])
+        print("🔗 permalink:", result["permalink"])
 
-        media_id = publish_container(uid, creation_id)
-        print("🚀 published media_id:", media_id)
-
-        link = get_permalink(media_id)
-        print("🔗 permalink:", link)
-        
         print("\n💡 GPT로 생성하려면: python post_to_threads.py \"주제\"")
