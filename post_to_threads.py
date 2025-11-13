@@ -115,7 +115,7 @@ def get_google_api_key():
         raise ValueError("GOOGLE_API_KEY가 .env 파일에 설정되지 않았습니다.")
     return api_key.strip().strip('"').strip("'")
 
-def _build_prompt(topic=None, style="engaging", max_length=500):
+def _build_prompt(topic=None):
     """프롬프트를 구성합니다."""
     
     # 금지 단어 목록
@@ -209,18 +209,16 @@ def _build_prompt(topic=None, style="engaging", max_length=500):
     
     return base_prompt + "\n" + user_prompt
 
-def generate_text_with_gemini(topic=None, style="engaging", max_length=500, logger: Logger = None):
+def generate_text_with_gemini(topic=None, logger: Logger = None):
     """
     Google Gemini를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
     
     Args:
         topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
-        style (str): 콘텐츠 스타일 (기본값: "engaging")
-        max_length (int): 최대 문자 길이 (기본값: 500)
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
+        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
     """
     if not GOOGLE_GENAI_AVAILABLE:
         raise ImportError("google-genai 라이브러리가 설치되지 않았습니다. pip install google-genai를 실행해주세요.")
@@ -233,7 +231,7 @@ def generate_text_with_gemini(topic=None, style="engaging", max_length=500, logg
     
     # 시스템 프롬프트와 사용자 프롬프트 결합
     system_prompt = "당신은 SNS 카피라이팅 전문가입니다. 특히 Meta Threads에서 자연스럽고 매력적인 글을 쓰는 데 특화돼 있습니다. 사용자와 대화할 때는 반드시 존댓말을 사용하고, 최종 생성되는 Threads 글은 반드시 반말 구어체로 작성해야 합니다."
-    user_prompt = _build_prompt(topic=topic, style=style, max_length=max_length)
+    user_prompt = _build_prompt(topic=topic)
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
     
     try:
@@ -259,18 +257,16 @@ def generate_text_with_gemini(topic=None, style="engaging", max_length=500, logg
         _emit(f"❌ Gemini 콘텐츠 생성 중 오류 발생: {e}", logger)
         raise
 
-def generate_text_with_gpt(topic=None, style="engaging", max_length=500, logger: Logger = None):
+def generate_text_with_gpt(topic=None, logger: Logger = None):
     """
     GPT를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
     
     Args:
         topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
-        style (str): 콘텐츠 스타일 (기본값: "engaging")
-        max_length (int): 최대 문자 길이 (기본값: 500)
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
+        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
     """
     # 환경 변수에서 OpenAI API 키 로드
     api_key = os.getenv('OPENAI_API_KEY')
@@ -283,7 +279,7 @@ def generate_text_with_gpt(topic=None, style="engaging", max_length=500, logger:
     client = OpenAI(api_key=api_key.strip().strip('"').strip("'"))
     
     # 프롬프트 구성
-    prompt = _build_prompt(topic=topic, style=style, max_length=max_length)
+    prompt = _build_prompt(topic=topic)
     
     try:
         # GPT API 호출
@@ -316,8 +312,6 @@ def generate_text_with_gpt(topic=None, style="engaging", max_length=500, logger:
 def generate_text_with_ai(
     model="gpt-4o",
     topic=None,
-    style="engaging",
-    max_length=500,
     logger: Logger = None
 ):
     """
@@ -326,17 +320,15 @@ def generate_text_with_ai(
     Args:
         model (str): 사용할 AI 모델 ("gpt-4o" 또는 "gemini-2.5-flash")
         topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
-        style (str): 콘텐츠 스타일 (기본값: "engaging")
-        max_length (int): 최대 문자 길이 (기본값: 500)
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
+        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
     """
     if model.startswith("gpt") or model == "gpt-4o":
-        return generate_text_with_gpt(topic=topic, style=style, max_length=max_length, logger=logger)
+        return generate_text_with_gpt(topic=topic, logger=logger)
     elif model.startswith("gemini") or model == "gemini-2.5-flash":
-        return generate_text_with_gemini(topic=topic, style=style, max_length=max_length, logger=logger)
+        return generate_text_with_gemini(topic=topic, logger=logger)
     else:
         raise ValueError(f"지원하지 않는 모델입니다: {model}. 'gpt-4o' 또는 'gemini-2.5-flash'를 사용해주세요.")
 
@@ -394,8 +386,6 @@ def _post_text_to_threads(threads_user_id: str, text: str, token: str, logger: L
 
 def post_gpt_generated_text(
     topic=None,
-    style="engaging",
-    max_length=500,
     model="gpt-4o",
     token=None,
     logger: Logger = None
@@ -405,8 +395,6 @@ def post_gpt_generated_text(
     
     Args:
         topic (str, optional): AI가 생성할 콘텐츠의 주제
-        style (str): 콘텐츠 스타일
-        max_length (int): 최대 문자 길이
         model (str): 사용할 AI 모델 ("gpt-4o" 또는 "gemini-2.5-flash")
         token (str, optional): Threads 액세스 토큰 (None이면 .env에서 읽음)
         logger (Logger, optional): 로그 함수
@@ -417,7 +405,7 @@ def post_gpt_generated_text(
     # 1단계: AI로 텍스트 생성
     model_name = "GPT" if model.startswith("gpt") else "Gemini"
     _emit(f"🤖 {model_name}로 텍스트 생성 중...", logger)
-    text = generate_text_with_ai(model=model, topic=topic, style=style, max_length=max_length, logger=logger)
+    text = generate_text_with_ai(model=model, topic=topic, logger=logger)
     _emit(f"생성된 텍스트: {text[:100]}...", logger)
 
     # 2단계: Threads 사용자 정보 가져오기
@@ -441,8 +429,6 @@ def post_gpt_generated_text(
 
 def post_multiple_gpt_texts(
     topic=None,
-    style="engaging",
-    max_length=500,
     count=5,
     interval_seconds=60,
     model="gpt-4o",
@@ -454,8 +440,6 @@ def post_multiple_gpt_texts(
 
     Args:
         topic (str, optional): 각 게시물에 대한 프롬프트 주제.
-        style (str): 콘텐츠 스타일.
-        max_length (int): 게시물 최대 길이.
         count (int): 게시할 게시물 수.
         interval_seconds (int): 게시 사이 지연(초).
         model (str): 사용할 AI 모델 ("gpt-4o" 또는 "gemini-2.5-flash").
@@ -486,7 +470,7 @@ def post_multiple_gpt_texts(
     for idx in range(count):
         _emit(f"\n===== 게시 {idx + 1}/{count} 시작 =====", logger)
         _emit(f"🤖 {model_name}로 텍스트 생성 중...", logger)
-        text = generate_text_with_ai(model=model, topic=topic, style=style, max_length=max_length, logger=logger)
+        text = generate_text_with_ai(model=model, topic=topic, logger=logger)
         _emit(f"생성된 텍스트: {text[:100]}...", logger)
 
         result = _post_text_to_threads(threads_user_id, text, token, logger=logger)
@@ -508,8 +492,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Threads에 AI 생성 콘텐츠를 자동 게시합니다.")
     parser.add_argument("topic", nargs="?", help="AI가 생성할 콘텐츠 주제 (미입력 시 기본 테스트 모드 실행)")
-    parser.add_argument("--style", default="engaging", help="콘텐츠 스타일 (기본값: engaging)")
-    parser.add_argument("--max-length", type=int, default=500, help="콘텐츠 최대 글자 수 (기본값: 500)")
     parser.add_argument("--count", type=int, default=5, help="게시할 게시물 수 (기본값: 5)")
     parser.add_argument("--interval", dest="interval_seconds", type=int, default=60, help="게시 간격(초) (기본값: 60)")
     parser.add_argument("--model", default="gpt-4o", choices=["gpt-4o", "gemini-2.5-flash"], help="사용할 AI 모델 (기본값: gpt-4o)")
@@ -521,8 +503,6 @@ if __name__ == "__main__":
         print("=" * 60)
         post_multiple_gpt_texts(
             topic=args.topic,
-            style=args.style,
-            max_length=args.max_length,
             count=args.count,
             interval_seconds=args.interval_seconds,
             model=args.model,

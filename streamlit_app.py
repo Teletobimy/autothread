@@ -63,8 +63,7 @@ elif model == "gemini-2.5-flash" and not google_key:
 topic = st.text_input(
     "게시 주제 (선택)", help="공백이면 AI가 자유롭게 주제를 선택합니다."
 )
-style = st.text_input("문체 스타일", value="engaging")
-max_length = st.slider("최대 글자 수", min_value=50, max_value=500, value=500, step=10)
+st.info("💡 생성되는 글은 반말 구어체로 작성되며, 3~8줄 길이로 자동 생성됩니다.")
 count = st.number_input(
     "게시 횟수", min_value=1, max_value=10, value=5, step=1, format="%d"
 )
@@ -108,8 +107,6 @@ if st.button("Threads에 게시 시작", type="primary", use_container_width=Tru
         with st.spinner(f"{model_name}로 게시 중입니다. 최대 몇 분이 걸릴 수 있습니다..."):
             results = post_multiple_gpt_texts(
                 topic=topic or None,
-                style=style,
-                max_length=int(max_length),
                 count=int(count),
                 interval_seconds=int(interval_seconds),
                 model=model,
