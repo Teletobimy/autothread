@@ -1,6 +1,7 @@
 import gspread
 from google.oauth2.service_account import Credentials
 import os
+import streamlit as st
 
 # Constants
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,12 +16,32 @@ SCOPES = [
 
 def get_worksheet():
     """Authenticates and returns the worksheet object."""
-    if not os.path.exists(SERVICE_ACCOUNT_FILE):
-        raise FileNotFoundError(f"Service account file not found: {SERVICE_ACCOUNT_FILE}")
+    credentials = None
     
-    credentials = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES
-    )
+    # 1. Try Streamlit Secrets (Best for Cloud)
+    if "gcp_service_account" in st.secrets:
+        try:
+            # st.secrets returns a AttrDict, convert to standard dict for google-auth
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            credentials = Credentials.from_service_account_info(
+                creds_dict, scopes=SCOPES
+            )
+        except Exception as e:
+            st.error(f"Secrets 로드 중 오류: {e}")
+            
+    # 2. Fallback to Local File
+    if not credentials and os.path.exists(SERVICE_ACCOUNT_FILE):
+        credentials = Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES
+        )
+        
+    if not credentials:
+         raise FileNotFoundError(
+            "GCP 자격 증명을 찾을 수 없습니다. "
+            "Streamlit Secrets에 'gcp_service_account'를 설정하거나 "
+            "로컬에 JSON 키 파일이 있는지 확인해주세요."
+        )
+
     gc = gspread.authorize(credentials)
     sh = gc.open_by_key(SPREADSHEET_ID)
     try:
