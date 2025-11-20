@@ -115,110 +115,16 @@ def get_google_api_key():
         raise ValueError("GOOGLE_API_KEY가 .env 파일에 설정되지 않았습니다.")
     return api_key.strip().strip('"').strip("'")
 
-def _build_prompt(topic=None):
-    """프롬프트를 구성합니다."""
-    
-    # 금지 단어 목록
-    forbidden_words = [
-        "두려워할 시간에",
-        "배우는 순간",
-        "무료 툴부터",
-        "내가 만든 AI",
-        "우리 브랜드 Peedeline",
-        "500만 불 계약",
-        "AI 자동화 파이프라인"
-    ]
-    
-    base_prompt = """# 역할 정의
-당신은 **SNS 카피라이팅 전문가**입니다.
-특히 **Meta Threads**에서 자연스럽고 매력적인 글을 쓰는 데 특화돼 있습니다.
-사용자와 대화할 때는 반드시 **존댓말**을 사용해야 합니다.
-최종 생성되는 Threads 글은 반드시 **반말 구어체**로 작성해야 합니다.
-
-# 작성 원칙
-
-1. **글 타입**
-   - **일반형**
-   구조: Hook(도발적 질문/강렬한 선언) → 공감 → 팩트/인사이트/스토리/프레임워크 → 저장하거나 공유할 만한 결론
-
-2. **톤앤매너**
-   - 결과물: 무조건 반말, 구어체, 대화체
-   - 문장은 짧게 끊어 쓰기
-   - 필요하면 말 줄임 표현 사용 (예: ~거야, ~지, ~네, ~아냐?)
-   - 이모지, 특수문자, 장식 절대 사용하지 않음
-
-3. **알맹이 규칙**
-   - 첫줄은 무조건 페르소나 지칭 (예: 28살 주니어 여자 디자이너 한테 들은 얘기인데)
-   - 글 안에 반드시 두 가지 이상 포함:
-     a) 도발적 질문/역설/비유
-     b) 수치나 연구 데이터
-     c) 바로 써먹을 수 있는 팁
-     d) 기억하기 쉬운 프레임워크(3단계, 법칙 등)
-     e) 짧은 실화나 사례
-
-4. **길이 규칙**
-   - 3줄 ~ 8줄 중에서 작성
-   - 끝맺음은 항상 완결성 있게
-
-5. **출력 형식**
-   - 최종 결과물만 제시
-   - 결과물은 오직 반말
-   - 설명, 메타 텍스트 없음
-
-# 금지 사항
-다음 단어나 표현을 절대 사용하지 마세요:
-- "두려워할 시간에"
-- "배우는 순간"
-- "무료 툴부터"
-- "내가 만든 AI"
-- "우리 브랜드 Peedeline"
-- "500만 불 계약"
-- "AI 자동화 파이프라인"
-- 이모지, 특수문자, 장식 기호
-
-"""
-    
-    if topic:
-        user_prompt = f"""위 원칙에 따라 Threads 게시글을 작성해주세요.
-
-주제: {topic}
-
-요구사항:
-- 반말 구어체로 작성
-- 3줄~8줄 길이
-- 첫 줄에 페르소나 지칭 포함
-- 도발적 질문/역설/비유와 수치/데이터/팁/프레임워크/실화 중 두 가지 이상 포함
-- 이모지나 특수문자 사용하지 않음
-- 금지 단어 사용하지 않음
-- 완결성 있는 끝맺음
-
-텍스트만 작성하고, 따옴표나 설명 없이 콘텐츠만 반환해주세요."""
-    else:
-        user_prompt = f"""위 원칙에 따라 Threads 게시글을 자유롭게 작성해주세요.
-
-요구사항:
-- 반말 구어체로 작성
-- 3줄~8줄 길이
-- 첫 줄에 페르소나 지칭 포함
-- 도발적 질문/역설/비유와 수치/데이터/팁/프레임워크/실화 중 두 가지 이상 포함
-- 이모지나 특수문자 사용하지 않음
-- 금지 단어 사용하지 않음
-- 완결성 있는 끝맺음
-
-텍스트만 작성하고, 따옴표나 설명 없이 콘텐츠만 반환해주세요."""
-    
-    return base_prompt + "\n" + user_prompt
-
-def generate_text_with_gemini(topic=None, logger: Logger = None):
+def generate_text_with_gemini(prompt=None, logger: Logger = None):
     """
     Google Gemini를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
     
     Args:
-        topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
+        prompt (str): 사용자 입력 프롬프트
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
+        str: 생성된 Threads 텍스트 콘텐츠
     """
     if not GOOGLE_GENAI_AVAILABLE:
         raise ImportError("google-genai 라이브러리가 설치되지 않았습니다. pip install google-genai를 실행해주세요.")
@@ -229,16 +135,11 @@ def generate_text_with_gemini(topic=None, logger: Logger = None):
     # Gemini 클라이언트 초기화
     client = google_genai.Client(api_key=api_key)
     
-    # 시스템 프롬프트와 사용자 프롬프트 결합
-    system_prompt = "당신은 SNS 카피라이팅 전문가입니다. 특히 Meta Threads에서 자연스럽고 매력적인 글을 쓰는 데 특화돼 있습니다. 사용자와 대화할 때는 반드시 존댓말을 사용하고, 최종 생성되는 Threads 글은 반드시 반말 구어체로 작성해야 합니다."
-    user_prompt = _build_prompt(topic=topic)
-    full_prompt = f"{system_prompt}\n\n{user_prompt}"
-    
     try:
         # Gemini API 호출
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=full_prompt
+            contents=prompt
         )
         
         # 생성된 콘텐츠 추출
@@ -257,20 +158,20 @@ def generate_text_with_gemini(topic=None, logger: Logger = None):
         _emit(f"❌ Gemini 콘텐츠 생성 중 오류 발생: {e}", logger)
         raise
 
-def generate_text_with_gpt(topic=None, logger: Logger = None):
+def generate_text_with_gpt(prompt=None, logger: Logger = None):
     """
     GPT를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
     
     Args:
-        topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
+        prompt (str): 사용자 입력 프롬프트
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
+        str: 생성된 Threads 텍스트 콘텐츠
     """
     # 환경 변수에서 OpenAI API 키 로드
     api_key = os.getenv('OPENAI_API_KEY')
-    model = 'gpt-4o'  # gpt-5는 아직 출시되지 않았으므로 gpt-4o 사용
+    model = 'gpt-4o'
     
     if not api_key:
         raise ValueError("OPENAI_API_KEY가 .env 파일에 설정되지 않았습니다.")
@@ -278,19 +179,15 @@ def generate_text_with_gpt(topic=None, logger: Logger = None):
     # OpenAI 클라이언트 초기화
     client = OpenAI(api_key=api_key.strip().strip('"').strip("'"))
     
-    # 프롬프트 구성
-    prompt = _build_prompt(topic=topic)
-    
     try:
         # GPT API 호출
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "당신은 SNS 카피라이팅 전문가입니다. 특히 Meta Threads에서 자연스럽고 매력적인 글을 쓰는 데 특화돼 있습니다. 사용자와 대화할 때는 반드시 존댓말을 사용하고, 최종 생성되는 Threads 글은 반드시 반말 구어체로 작성해야 합니다."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=150
+            max_tokens=500
         )
         
         # 생성된 콘텐츠 추출
@@ -311,7 +208,7 @@ def generate_text_with_gpt(topic=None, logger: Logger = None):
 
 def generate_text_with_ai(
     model="gpt-4o",
-    topic=None,
+    prompt=None,
     logger: Logger = None
 ):
     """
@@ -319,16 +216,16 @@ def generate_text_with_ai(
     
     Args:
         model (str): 사용할 AI 모델 ("gpt-4o" 또는 "gemini-2.5-flash")
-        topic (str, optional): 생성할 콘텐츠의 주제. None이면 자동 생성
+        prompt (str): 사용자 입력 프롬프트
         logger (Logger, optional): 로그 함수
     
     Returns:
-        str: 생성된 Threads 텍스트 콘텐츠 (3~8줄, 반말 구어체)
+        str: 생성된 Threads 텍스트 콘텐츠
     """
     if model.startswith("gpt") or model == "gpt-4o":
-        return generate_text_with_gpt(topic=topic, logger=logger)
+        return generate_text_with_gpt(prompt=prompt, logger=logger)
     elif model.startswith("gemini") or model == "gemini-2.5-flash":
-        return generate_text_with_gemini(topic=topic, logger=logger)
+        return generate_text_with_gemini(prompt=prompt, logger=logger)
     else:
         raise ValueError(f"지원하지 않는 모델입니다: {model}. 'gpt-4o' 또는 'gemini-2.5-flash'를 사용해주세요.")
 

@@ -62,14 +62,14 @@ with tab1:
         index=1
     )
 
-    topic = st.text_input("게시 주제 (프롬프트)", placeholder="예: AI 트렌드, 직장인 꿀팁...")
+    prompt = st.text_area("프롬프트 입력", height=200, placeholder="AI에게 요청할 내용을 상세히 적어주세요.")
     
     # 1. Add generation count
     gen_count = st.number_input("생성할 게시글 수", min_value=1, max_value=20, value=1)
     
     if st.button("생성 및 시트에 저장", type="primary"):
-        if not topic:
-            st.warning("주제를 입력해주세요.")
+        if not prompt:
+            st.warning("프롬프트를 입력해주세요.")
         elif (model == "gpt-4o" and not openai_key) or (model == "gemini-2.5-flash" and not google_key):
             st.error(f"{model} 사용을 위한 API 키가 필요합니다.")
         else:
@@ -81,7 +81,7 @@ with tab1:
                     status_text.text(f"[{i+1}/{gen_count}] 콘텐츠 생성 중...")
                     
                     with st.spinner(f"{model}로 {i+1}번째 콘텐츠 생성 중..."):
-                        generated_text = generate_text_with_ai(model=model, topic=topic)
+                        generated_text = generate_text_with_ai(model=model, prompt=prompt)
                     
                     # Show preview of the last generated text
                     if i == gen_count - 1:
