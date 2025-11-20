@@ -72,6 +72,9 @@ def pop_from_queue(sheet_name=SHEET_NAME):
     Reads the top item from Column A of the specified sheet, 
     moves it to the bottom of Column C,
     and shifts Column A up (deleting the processed item from A).
+    
+    Returns:
+        tuple: (text, row_index_in_C) or (None, None)
     """
     ws = get_worksheet(sheet_name)
     
@@ -79,7 +82,7 @@ def pop_from_queue(sheet_name=SHEET_NAME):
     col_a = ws.col_values(1)
     
     if not col_a:
-        return None
+        return None, None
         
     text = col_a[0]
     
@@ -104,4 +107,25 @@ def pop_from_queue(sheet_name=SHEET_NAME):
         # Clear the cell that was previously the last one
         ws.update_cell(len(col_a), 1, "")
         
-    return text
+    return text, next_row_c
+
+def mark_as_failed(sheet_name, row_index):
+    """Marks the cell at Column C, row_index as failed (Red background)."""
+    try:
+        ws = get_worksheet(sheet_name)
+        # Light red background
+        fmt = {
+            "backgroundColor": {
+                "red": 1.0,
+                "green": 0.8,
+                "blue": 0.8
+            }
+        }
+        # Check if format method exists (gspread v6+)
+        if hasattr(ws, 'format'):
+            ws.format(f"C{row_index}", fmt)
+        else:
+            # Fallback or ignore if not supported
+            pass
+    except Exception as e:
+        print(f"Failed to format cell: {e}")

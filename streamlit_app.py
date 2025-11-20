@@ -227,7 +227,7 @@ with tab3:
                 
                 try:
                     # 1. Get content from Google Sheet
-                    text_to_post = google_sheets.pop_from_queue(sheet_name=current_sheet_name)
+                    text_to_post, row_index = google_sheets.pop_from_queue(sheet_name=current_sheet_name)
                     
                     if not text_to_post:
                         log_callback(f"⚠️ [{current_sheet_name}] 시트의 A열이 비어있습니다.")
@@ -275,9 +275,11 @@ with tab3:
                             log_callback(f"✅ [{current_sheet_name}] 게시 성공! Link: {result['permalink']}")
                             count += 1
                         else:
-                            log_callback(f"❌ [{current_sheet_name}] 게시 실패. (콘텐츠는 이미 시트에서 제거됨)")
-                            # If failed, we already moved it to C.
-                            # For now, we just log and continue.
+                            log_callback(f"❌ [{current_sheet_name}] 게시 실패. (시트 C열을 빨간색으로 표시합니다)")
+                            # Mark as failed in Google Sheet
+                            if row_index:
+                                google_sheets.mark_as_failed(current_sheet_name, row_index)
+                            
                             count += 1 # Still increment count to move to next sheet/language
                     
                     # 3. Wait for next interval
