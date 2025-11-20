@@ -147,15 +147,28 @@ class ContentGenerator:
             return self._generate_gpt(prompt)
 
     def _generate_gemini(self, prompt: str) -> str:
-        try:
-            response = self.gemini_chat.send_message(prompt)
-            content = response.text.strip()
-            content = self._clean_content(content)
-            _emit(f"✅ Gemini 생성 완료 ({len(content)}자)", self.logger)
-            return content
-        except Exception as e:
-            _emit(f"❌ Gemini 오류: {e}", self.logger)
-            raise
+        max_retries = 5
+        base_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.gemini_chat.send_message(prompt)
+                content = response.text.strip()
+                content = self._clean_content(content)
+                _emit(f"✅ Gemini 생성 완료 ({len(content)}자)", self.logger)
+                return content
+            except Exception as e:
+                # Check for 503 or other transient errors
+                error_str = str(e)
+                if "503" in error_str or "overloaded" in error_str or "429" in error_str:
+                    if attempt < max_retries - 1:
+                        wait_time = base_delay * (2 ** attempt)  # Exponential backoff: 2, 4, 8, 16...
+                        _emit(f"⚠️ 모델 과부하로 대기 중... ({wait_time}초 후 재시도 {attempt+1}/{max_retries})", self.logger)
+                        time.sleep(wait_time)
+                        continue
+                
+                _emit(f"❌ Gemini 오류: {e}", self.logger)
+                raise
 
     def _generate_gpt(self, prompt: str) -> str:
         try:
