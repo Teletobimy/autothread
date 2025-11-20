@@ -87,11 +87,11 @@ with tab2:
     
     interval_minutes = st.number_input(
         "게시 간격 (분)", 
-        min_value=15, 
+        min_value=1, 
         max_value=1440, 
         value=60, 
-        step=15,
-        help="15분 ~ 24시간(1440분) 사이로 설정 가능합니다."
+        step=1,
+        help="1분 ~ 24시간(1440분) 사이로 설정 가능합니다."
     )
     
     if st.button("자동 게시 시작", type="primary"):

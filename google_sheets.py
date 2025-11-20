@@ -72,15 +72,43 @@ def get_next_post_from_queue():
 
 def pop_from_queue():
     """
-    Reads the top item, returns it, and deletes that row.
+    Reads the top item from Column A, moves it to the bottom of Column C,
+    and shifts Column A up (deleting the processed item from A).
     """
     ws = get_worksheet()
+    
+    # 1. Read all values from Column A
     col_a = ws.col_values(1)
     
     if not col_a:
         return None
         
     text = col_a[0]
-    # Delete row 1
-    ws.delete_rows(1)
+    
+    # 2. Append to Column C
+    # Find the first empty row in Column C
+    col_c = ws.col_values(3)
+    next_row_c = len(col_c) + 1
+    ws.update_cell(next_row_c, 3, text)
+    
+    # 3. Shift Column A up
+    # We want to remove the first item and write the rest back.
+    # To avoid leaving old data at the bottom, we should clear the column first or be careful.
+    # Efficient way: Write the new list (A[1:]) to A1. Clear the cell after the last new item.
+    
+    new_col_a = col_a[1:]
+    
+    # Prepare the update data. We need a list of lists for update.
+    # [[val1], [val2], ...]
+    update_data = [[val] for val in new_col_a]
+    
+    # If new_col_a is empty, we just clear A1.
+    if not update_data:
+        ws.update(range_name="A1", values=[[""]])
+    else:
+        # Update A1:A{len}
+        ws.update(range_name=f"A1:A{len(update_data)}", values=update_data)
+        # Clear the cell that was previously the last one
+        ws.update_cell(len(col_a), 1, "")
+        
     return text
