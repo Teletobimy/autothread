@@ -67,12 +67,13 @@ def get_all_from_queue():
     col_a = ws.col_values(1)
     return col_a
 
-def pop_from_queue():
+def pop_from_queue(sheet_name=SHEET_NAME):
     """
-    Reads the top item from Column A, moves it to the bottom of Column C,
+    Reads the top item from Column A of the specified sheet, 
+    moves it to the bottom of Column C,
     and shifts Column A up (deleting the processed item from A).
     """
-    ws = get_worksheet(SHEET_NAME)
+    ws = get_worksheet(sheet_name)
     
     # 1. Read all values from Column A
     col_a = ws.col_values(1)

@@ -171,66 +171,120 @@ with tab3:
     st.info("구글 스프레드시트 A열의 콘텐츠를 순서대로 가져와 Threads에 게시합니다.")
     st.warning("⚠️ 주의: 자동 게시가 진행되는 동안에는 이 브라우저 탭을 닫거나 새로고침하지 마세요. (탭이 닫히면 중단됩니다)")
     
-    interval_minutes = st.number_input(
-        "게시 간격 (분)", 
-        min_value=1, 
-        max_value=1440, 
-        value=60, 
-        step=1,
-        help="1분 ~ 24시간(1440분) 사이로 설정 가능합니다."
+    post_lang = st.radio(
+        "게시 언어 선택",
+        options=["기본 (쓰레드)", "영어", "스페인어", "둘 다 (영어 + 스페인어)"],
+        horizontal=True
     )
+
+    interval_minutes = st.number_input("게시 간격 (분)", min_value=1, max_value=1440, value=60, help="최소 1분, 최대 24시간(1440분)")
     
     if st.button("자동 게시 시작", type="primary"):
         if not threads_token:
             st.error("Threads Access Token이 필요합니다.")
         else:
-            status_area = st.empty()
-            log_area = st.empty()
+            status_area = st.empty() # Keep this for overall status
+            log_placeholder = st.empty() # This will display the logs
             logs = []
             
-            def log(msg):
+            def log_callback(message):
                 timestamp = time.strftime("%H:%M:%S")
-                logs.insert(0, f"[{timestamp}] {msg}")
-                log_area.code("\n".join(logs[:20]), language="text")
-
+                logs.append(f"[{timestamp}] {message}")
+                # Keep only last 10 logs
+                if len(logs) > 10:
+                    logs.pop(0)
+                log_placeholder.code("\n".join(logs), language="text")
+            
             status_area.info("🚀 자동 게시가 시작되었습니다. 이 탭을 닫지 마세요.")
             
             # Verify user first
             try:
                 user = me(token=threads_token)
-                log(f"로그인 확인: @{user.get('username', 'unknown')}")
+                log_callback(f"로그인 확인: @{user.get('username', 'unknown')}")
             except Exception as e:
                 st.error(f"Threads 인증 실패: {e}")
                 st.stop()
-
+            
+            count = 0
+            
+            # Determine target sheets based on selection
+            if post_lang == "기본 (쓰레드)":
+                target_sheets = ["쓰레드"]
+            elif post_lang == "영어":
+                target_sheets = ["영어"]
+            elif post_lang == "스페인어":
+                target_sheets = ["스페인어"]
+            else: # 둘 다
+                target_sheets = ["영어", "스페인어"]
+            
             while True:
+                # Determine which sheet to use for this turn
+                # If "Both", alternate based on count
+                current_sheet_idx = count % len(target_sheets)
+                current_sheet_name = target_sheets[current_sheet_idx]
+                
+                log_callback(f"[{current_sheet_name}] 시트에서 게시글 가져오는 중...")
+                
                 try:
-                    # 1. Pop from sheet
-                    log("📥 시트에서 다음 게시물 확인 중...")
-                    text = google_sheets.pop_from_queue()
+                    # 1. Get content from Google Sheet
+                    text_to_post = google_sheets.pop_from_queue(sheet_name=current_sheet_name)
                     
-                    if text:
-                        log(f"📝 게시물 발견: {text[:30]}...")
+                    if not text_to_post:
+                        log_callback(f"⚠️ [{current_sheet_name}] 시트의 A열이 비어있습니다.")
                         
-                        # 2. Post to Threads
-                        result = _post_text_to_threads(user["id"], text, threads_token, logger=log)
-                        log(f"✅ 게시 성공! Link: {result['permalink']}")
-                        
-                        # 3. Wait
-                        wait_sec = interval_minutes * 60
-                        log(f"⏳ 다음 게시까지 {interval_minutes}분 대기합니다...")
-                        time.sleep(wait_sec)
+                        # If single mode, stop.
+                        if len(target_sheets) == 1:
+                            log_callback("더 이상 게시할 콘텐츠가 없습니다. 자동 게시를 종료합니다.")
+                            status_area.success("🎉 모든 콘텐츠 게시가 완료되었습니다!")
+                            st.balloons()
+                            break
+                        else:
+                            # Multi mode. Check if all target sheets are empty.
+                            all_target_sheets_empty = True
+                            for sheet in target_sheets:
+                                try:
+                                    ws = google_sheets.get_worksheet(sheet)
+                                    if ws.col_values(1): # Check if column A has any values
+                                        all_target_sheets_empty = False
+                                        break
+                                except Exception as e:
+                                    log_callback(f"시트 '{sheet}' 확인 중 오류 발생: {e}")
+                                    # If we can't even check, assume it might have content or skip.
+                                    # For robustness, let's assume it's not empty if we can't check.
+                                    all_target_sheets_empty = False 
+                                    break
+                            
+                            if all_target_sheets_empty:
+                                log_callback("모든 시트의 콘텐츠가 소진되었습니다. 자동 게시를 종료합니다.")
+                                status_area.success("🎉 모든 콘텐츠 게시가 완료되었습니다!")
+                                st.balloons()
+                                break
+                            else:
+                                log_callback(f"[{current_sheet_name}] 시트가 비어있습니다. 다음 시트를 확인합니다.")
+                                # Increment count to try the next sheet immediately without waiting
+                                count += 1 
+                                continue # Skip to next iteration to try another sheet
                     else:
-                        # 3. Auto-stop when empty
-                        log("📭 대기열(A열)이 비어있습니다. 자동 게시를 종료합니다.")
-                        status_area.success("🎉 모든 게시가 완료되었습니다! (대기열 비어있음)")
-                        st.balloons()
-                        break
+                        # 2. Post to Threads
+                        log_callback(f"[{current_sheet_name}] 게시 중: {text_to_post[:30]}...")
                         
+                        # The original _post_text_to_threads takes user_id, text, token, logger
+                        result = _post_text_to_threads(user["id"], text_to_post, threads_token, logger=log_callback)
+                        
+                        if result and 'permalink' in result:
+                            log_callback(f"✅ [{current_sheet_name}] 게시 성공! Link: {result['permalink']}")
+                            count += 1
+                        else:
+                            log_callback(f"❌ [{current_sheet_name}] 게시 실패. (콘텐츠는 이미 시트에서 제거됨)")
+                            # If failed, we already moved it to C.
+                            # For now, we just log and continue.
+                            count += 1 # Still increment count to move to next sheet/language
+                    
+                    # 3. Wait for next interval
+                    log_callback(f"⏳ {interval_minutes}분 대기 중...")
+                    time.sleep(interval_minutes * 60)
+                    
                 except Exception as e:
-                    log(f"❌ 오류 발생: {e}")
-                    time.sleep(60) # Wait a bit before retry on error
-
-
-
+                    log_callback(f"❌ 오류 발생: {e}")
+                    time.sleep(60) # Wait 1 min on error before retrying
 
