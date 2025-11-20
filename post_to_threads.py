@@ -126,9 +126,9 @@ class ContentGenerator:
             if not GOOGLE_GENAI_AVAILABLE:
                 raise ImportError("google-genai 라이브러리가 설치되지 않았습니다.")
             api_key = get_google_api_key()
-            client = google_genai.Client(api_key=api_key)
+            self.client = google_genai.Client(api_key=api_key)
             # Gemini chat session initialization
-            self.gemini_chat = client.chats.create(model="gemini-2.5-flash")
+            self.gemini_chat = self.client.chats.create(model="gemini-2.5-flash")
             
         elif model.startswith("gpt"):
             self.api_key = os.getenv('OPENAI_API_KEY')

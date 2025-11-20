@@ -65,7 +65,7 @@ with tab1:
     prompt = st.text_area("프롬프트 입력", height=200, placeholder="AI에게 요청할 내용을 상세히 적어주세요.")
     
     # 1. Add generation count
-    gen_count = st.number_input("생성할 게시글 수", min_value=1, max_value=20, value=1)
+    gen_count = st.number_input("생성할 게시글 수", min_value=1, max_value=100, value=1)
     
     if st.button("생성 및 시트에 저장", type="primary"):
         if not prompt:
