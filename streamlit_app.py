@@ -55,13 +55,17 @@ with tab1:
     st.header("콘텐츠 생성 및 저장")
     st.info("AI를 이용해 콘텐츠를 생성하고 구글 스프레드시트(A열)에 저장합니다.")
 
+    # 2. Default model changed to Gemini (index 1)
     model = st.selectbox(
         "AI 모델 선택",
         options=["gpt-4o", "gemini-2.5-flash"],
-        index=0
+        index=1
     )
 
     topic = st.text_input("게시 주제 (프롬프트)", placeholder="예: AI 트렌드, 직장인 꿀팁...")
+    
+    # 1. Add generation count
+    gen_count = st.number_input("생성할 게시글 수", min_value=1, max_value=20, value=1)
     
     if st.button("생성 및 시트에 저장", type="primary"):
         if not topic:
@@ -70,16 +74,27 @@ with tab1:
             st.error(f"{model} 사용을 위한 API 키가 필요합니다.")
         else:
             try:
-                with st.spinner(f"{model}로 콘텐츠 생성 중..."):
-                    generated_text = generate_text_with_ai(model=model, topic=topic)
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 
-                st.success("콘텐츠 생성 완료!")
-                st.text_area("생성된 텍스트", value=generated_text, height=150)
-                
-                with st.spinner("구글 시트에 저장 중..."):
+                for i in range(gen_count):
+                    status_text.text(f"[{i+1}/{gen_count}] 콘텐츠 생성 중...")
+                    
+                    with st.spinner(f"{model}로 {i+1}번째 콘텐츠 생성 중..."):
+                        generated_text = generate_text_with_ai(model=model, topic=topic)
+                    
+                    # Show preview of the last generated text
+                    if i == gen_count - 1:
+                        st.text_area(f"마지막 생성된 텍스트 ({i+1}/{gen_count})", value=generated_text, height=150)
+                    
+                    status_text.text(f"[{i+1}/{gen_count}] 구글 시트에 저장 중...")
                     google_sheets.append_to_sheet(generated_text)
+                    
+                    progress_bar.progress((i + 1) / gen_count)
+                    time.sleep(1) # Rate limit safety
                 
-                st.success("✅ 구글 스프레드시트 A열에 저장되었습니다.")
+                status_text.text("모든 작업 완료!")
+                st.success(f"✅ {gen_count}개의 콘텐츠가 구글 스프레드시트 A열에 저장되었습니다.")
                 
             except Exception as e:
                 st.error(f"오류 발생: {e}")
@@ -88,6 +103,7 @@ with tab1:
 with tab2:
     st.header("자동 게시 (Auto Posting)")
     st.info("구글 스프레드시트 A열의 콘텐츠를 순서대로 가져와 Threads에 게시합니다.")
+    st.warning("⚠️ 주의: 자동 게시가 진행되는 동안에는 이 브라우저 탭을 닫거나 새로고침하지 마세요. (탭이 닫히면 중단됩니다)")
     
     interval_minutes = st.number_input(
         "게시 간격 (분)", 
@@ -139,8 +155,11 @@ with tab2:
                         log(f"⏳ 다음 게시까지 {interval_minutes}분 대기합니다...")
                         time.sleep(wait_sec)
                     else:
-                        log("📭 대기열(A열)이 비어있습니다. 1분 후 다시 확인합니다.")
-                        time.sleep(60)
+                        # 3. Auto-stop when empty
+                        log("📭 대기열(A열)이 비어있습니다. 자동 게시를 종료합니다.")
+                        status_area.success("🎉 모든 게시가 완료되었습니다! (대기열 비어있음)")
+                        st.balloons()
+                        break
                         
                 except Exception as e:
                     log(f"❌ 오류 발생: {e}")
