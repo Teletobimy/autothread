@@ -1,127 +1,147 @@
 import os
+import time
 from typing import List
-
 import streamlit as st
-
-from post_to_threads import post_multiple_gpt_texts
+from post_to_threads import generate_text_with_ai, _post_text_to_threads, me, get_token
+import google_sheets
 
 st.set_page_config(page_title="Threads Auto Poster", page_icon="🧵")
 st.title("Threads Auto Poster")
-st.write(
-    "OpenAI GPT 또는 Google Gemini와 Threads Graph API를 활용해 지정한 간격으로 자동 게시합니다."
-)
 
-
+# --- Helper Functions ---
 def _resolve_secret(key: str) -> str:
-    """Streamlit secrets > 환경 변수 순으로 값을 찾습니다."""
     if key in st.secrets:
         return st.secrets[key]
     return os.getenv(key, "")
 
-
 def _ensure_env_var(key: str, value: str) -> None:
-    """실행 중 재사용을 위해 환경 변수에 값을 설정합니다."""
     if value:
         os.environ[key] = value
 
-
+# --- Sidebar: Configuration ---
 with st.sidebar:
-    st.header("환경 변수 상태")
+    st.header("환경 변수 설정")
     openai_key = _resolve_secret("OPENAI_API_KEY")
     google_key = _resolve_secret("GOOGLE_API_KEY")
     threads_token = _resolve_secret("LONG_LIVED_ACCESS_TOKEN")
 
-    st.write(
-        "- OPENAI_API_KEY: " + ("✅ 설정됨" if openai_key else "❌ 미설정")
-    )
-    st.write(
-        "- GOOGLE_API_KEY: " + ("✅ 설정됨" if google_key else "❌ 미설정")
-    )
-    st.write(
-        "- LONG_LIVED_ACCESS_TOKEN: " + ("✅ 설정됨" if threads_token else "❌ 미설정")
-    )
-
+    # Input fields for keys if not set
+    if not openai_key:
+        openai_key = st.text_input("OPENAI_API_KEY", type="password")
+    if not google_key:
+        google_key = st.text_input("GOOGLE_API_KEY", type="password")
     if not threads_token:
-        st.error(
-            "Threads LONG_LIVED_ACCESS_TOKEN이 필요합니다. Streamlit secrets에 저장한 뒤 다시 실행해주세요.",
-            icon="🚫",
-        )
+        threads_token = st.text_input("LONG_LIVED_ACCESS_TOKEN", type="password")
 
-
-model = st.selectbox(
-    "AI 모델 선택",
-    options=["gpt-4o", "gemini-2.5-flash"],
-    index=0,
-    help="사용할 AI 모델을 선택하세요. GPT-4o 또는 Gemini 2.5 Flash를 사용할 수 있습니다."
-)
-
-if model == "gpt-4o" and not openai_key:
-    st.warning("⚠️ GPT-4o를 사용하려면 OPENAI_API_KEY가 필요합니다.", icon="⚠️")
-elif model == "gemini-2.5-flash" and not google_key:
-    st.warning("⚠️ Gemini 2.5 Flash를 사용하려면 GOOGLE_API_KEY가 필요합니다.", icon="⚠️")
-
-topic = st.text_input(
-    "게시 주제 (선택)", help="공백이면 AI가 자유롭게 주제를 선택합니다."
-)
-st.info("💡 생성되는 글은 반말 구어체로 작성되며, 3~8줄 길이로 자동 생성됩니다.")
-count = st.number_input(
-    "게시 횟수", min_value=1, max_value=10, value=5, step=1, format="%d"
-)
-interval_seconds = st.number_input(
-    "게시 간격(초)", min_value=0, max_value=6000, value=60, step=5, format="%d"
-)
-
-
-log_placeholder = st.empty()
-log_messages: List[str] = []
-
-
-def log_callback(message: str) -> None:
-    log_messages.append(message)
-    log_placeholder.write("\n".join(log_messages))
-
-
-if st.button("Threads에 게시 시작", type="primary", use_container_width=True):
-    if not threads_token:
-        st.error("Threads LONG_LIVED_ACCESS_TOKEN이 필요합니다.", icon="🚫")
-        st.stop()
-    
-    # 선택한 모델에 따라 API 키 확인
-    if model == "gpt-4o" and not openai_key:
-        st.error("GPT-4o를 사용하려면 OPENAI_API_KEY가 필요합니다.", icon="🚫")
-        st.stop()
-    elif model == "gemini-2.5-flash" and not google_key:
-        st.error("Gemini 2.5 Flash를 사용하려면 GOOGLE_API_KEY가 필요합니다.", icon="🚫")
-        st.stop()
-
-    # 선택한 모델에 따라 API 키 설정
-    if model == "gpt-4o":
-        _ensure_env_var("OPENAI_API_KEY", openai_key)
-    elif model == "gemini-2.5-flash":
-        _ensure_env_var("GOOGLE_API_KEY", google_key)
-    
+    # Set env vars
+    _ensure_env_var("OPENAI_API_KEY", openai_key)
+    _ensure_env_var("GOOGLE_API_KEY", google_key)
     _ensure_env_var("LONG_LIVED_ACCESS_TOKEN", threads_token)
 
-    try:
-        model_name = "GPT-4o" if model == "gpt-4o" else "Gemini 2.5 Flash"
-        with st.spinner(f"{model_name}로 게시 중입니다. 최대 몇 분이 걸릴 수 있습니다..."):
-            results = post_multiple_gpt_texts(
-                topic=topic or None,
-                count=int(count),
-                interval_seconds=int(interval_seconds),
-                model=model,
-                logger=log_callback,
-            )
+    st.divider()
+    st.write(f"OpenAI Key: {'✅' if openai_key else '❌'}")
+    st.write(f"Google Key: {'✅' if google_key else '❌'}")
+    st.write(f"Threads Token: {'✅' if threads_token else '❌'}")
 
-        st.success("모든 게시가 완료되었습니다! 🎉")
+# --- Tabs ---
+tab1, tab2 = st.tabs(["📝 콘텐츠 생성", "🚀 자동 게시"])
 
-        for res in results:
-            st.markdown(f"**게시 {res['sequence']}** — [Threads 링크]({res['permalink']})")
-            st.code(res["text"], language="text")
-    except Exception as exc:
-        st.error(f"오류가 발생했습니다: {exc}")
-        import traceback
-        st.code(traceback.format_exc(), language="python")
+# --- Tab 1: Generate Content ---
+with tab1:
+    st.header("콘텐츠 생성 및 저장")
+    st.info("AI를 이용해 콘텐츠를 생성하고 구글 스프레드시트(A열)에 저장합니다.")
+
+    model = st.selectbox(
+        "AI 모델 선택",
+        options=["gpt-4o", "gemini-2.5-flash"],
+        index=0
+    )
+
+    topic = st.text_input("게시 주제 (프롬프트)", placeholder="예: AI 트렌드, 직장인 꿀팁...")
+    
+    if st.button("생성 및 시트에 저장", type="primary"):
+        if not topic:
+            st.warning("주제를 입력해주세요.")
+        elif (model == "gpt-4o" and not openai_key) or (model == "gemini-2.5-flash" and not google_key):
+            st.error(f"{model} 사용을 위한 API 키가 필요합니다.")
+        else:
+            try:
+                with st.spinner(f"{model}로 콘텐츠 생성 중..."):
+                    generated_text = generate_text_with_ai(model=model, topic=topic)
+                
+                st.success("콘텐츠 생성 완료!")
+                st.text_area("생성된 텍스트", value=generated_text, height=150)
+                
+                with st.spinner("구글 시트에 저장 중..."):
+                    google_sheets.append_to_sheet(generated_text)
+                
+                st.success("✅ 구글 스프레드시트 A열에 저장되었습니다.")
+                
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+
+# --- Tab 2: Auto Post ---
+with tab2:
+    st.header("자동 게시 (Auto Posting)")
+    st.info("구글 스프레드시트 A열의 콘텐츠를 순서대로 가져와 Threads에 게시합니다.")
+    
+    interval_minutes = st.number_input(
+        "게시 간격 (분)", 
+        min_value=15, 
+        max_value=1440, 
+        value=60, 
+        step=15,
+        help="15분 ~ 24시간(1440분) 사이로 설정 가능합니다."
+    )
+    
+    if st.button("자동 게시 시작", type="primary"):
+        if not threads_token:
+            st.error("Threads Access Token이 필요합니다.")
+        else:
+            status_area = st.empty()
+            log_area = st.empty()
+            logs = []
+            
+            def log(msg):
+                timestamp = time.strftime("%H:%M:%S")
+                logs.insert(0, f"[{timestamp}] {msg}")
+                log_area.code("\n".join(logs[:20]), language="text")
+
+            status_area.info("🚀 자동 게시가 시작되었습니다. 이 탭을 닫지 마세요.")
+            
+            # Verify user first
+            try:
+                user = me(token=threads_token)
+                log(f"로그인 확인: @{user.get('username', 'unknown')}")
+            except Exception as e:
+                st.error(f"Threads 인증 실패: {e}")
+                st.stop()
+
+            while True:
+                try:
+                    # 1. Pop from sheet
+                    log("📥 시트에서 다음 게시물 확인 중...")
+                    text = google_sheets.pop_from_queue()
+                    
+                    if text:
+                        log(f"📝 게시물 발견: {text[:30]}...")
+                        
+                        # 2. Post to Threads
+                        result = _post_text_to_threads(user["id"], text, threads_token, logger=log)
+                        log(f"✅ 게시 성공! Link: {result['permalink']}")
+                        
+                        # 3. Wait
+                        wait_sec = interval_minutes * 60
+                        log(f"⏳ 다음 게시까지 {interval_minutes}분 대기합니다...")
+                        time.sleep(wait_sec)
+                    else:
+                        log("📭 대기열(A열)이 비어있습니다. 1분 후 다시 확인합니다.")
+                        time.sleep(60)
+                        
+                except Exception as e:
+                    log(f"❌ 오류 발생: {e}")
+                    time.sleep(60) # Wait a bit before retry on error
+
 
 
 
