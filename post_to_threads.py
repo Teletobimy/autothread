@@ -90,6 +90,7 @@ if sys.platform == 'win32':
 load_dotenv()
 
 BASE = "https://graph.threads.net/v1.0"
+THREADS_API_BASE_URL = BASE
 
 Logger = Optional[Callable[[str], None]]
 
