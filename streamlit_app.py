@@ -38,10 +38,14 @@ with st.sidebar:
     _ensure_env_var("GOOGLE_API_KEY", google_key)
     _ensure_env_var("LONG_LIVED_ACCESS_TOKEN", threads_token)
 
+    # Check GCP Service Account in secrets
+    has_gcp_creds = "gcp_service_account" in st.secrets
+    
     st.divider()
     st.write(f"OpenAI Key: {'✅' if openai_key else '❌'}")
     st.write(f"Google Key: {'✅' if google_key else '❌'}")
     st.write(f"Threads Token: {'✅' if threads_token else '❌'}")
+    st.write(f"GCP Service Account: {'✅' if has_gcp_creds else '❌'}")
 
 # --- Tabs ---
 tab1, tab2 = st.tabs(["📝 콘텐츠 생성", "🚀 자동 게시"])
