@@ -226,23 +226,64 @@ def me(token=None):
     r.raise_for_status()
     return r.json()
 
-def create_text_container(threads_user_id, text, token=None):
-    if token is None:
-        token = get_token()
-    payload = {"media_type":"TEXT", "text": text, "access_token": token}
-    r = requests.post(f"{BASE}/{threads_user_id}/threads",
-                      headers={"Content-Type":"application/json"},
-                      data=json.dumps(payload), timeout=30)
-    r.raise_for_status()
-    return r.json()["id"]  # creation_id
 
-def publish_container(threads_user_id, creation_id, token=None):
-    if token is None:
-        token = get_token()
-    r = requests.post(f"{BASE}/{threads_user_id}/threads_publish",
-                      data={"creation_id": creation_id, "access_token": token}, timeout=20)
-    r.raise_for_status()
-    return r.json()["id"]  # 최종 media id
+def create_text_container(user_id, text, token, logger=None):
+    url = f"{THREADS_API_BASE_URL}/{user_id}/threads"
+    payload = {
+        'media_type': 'TEXT',
+        'text': text,
+        'access_token': token
+    }
+    response = requests.post(url, data=json.dumps(payload), headers={"Content-Type":"application/json"}, timeout=30)
+    try:
+        response.raise_for_status()
+        return response.json()['id']
+    except requests.exceptions.HTTPError as e:
+        _emit(f"❌ 컨테이너 생성 실패: {e}", logger)
+        _emit(f"응답 내용: {response.text}", logger)
+        raise
+
+def check_container_status(container_id, token, logger=None):
+    url = f"{BASE}/{container_id}"
+    params = {
+        'fields': 'status,error_message',
+        'access_token': token
+    }
+    
+    for _ in range(5): # Try 5 times
+        response = requests.get(url, params=params, timeout=10)
+        try:
+            response.raise_for_status()
+            data = response.json()
+            status = data.get('status')
+            if status == 'FINISHED':
+                return True
+            elif status == 'ERROR':
+                _emit(f"❌ 컨테이너 상태 오류: {data.get('error_message')}", logger)
+                return False
+            
+            _emit(f"⏳ 컨테이너 처리 중... (Status: {status})", logger)
+            time.sleep(1)
+        except Exception as e:
+            _emit(f"⚠️ 상태 확인 중 오류: {e}", logger)
+            time.sleep(1)
+            
+    return False
+
+def publish_container(user_id, container_id, token, logger=None):
+    url = f"{BASE}/{user_id}/threads_publish"
+    payload = {
+        'creation_id': container_id,
+        'access_token': token
+    }
+    response = requests.post(url, data=payload, timeout=20)
+    try:
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        _emit(f"❌ 게시 실패: {e}", logger)
+        _emit(f"응답 내용: {response.text}", logger)
+        raise
 
 def get_permalink(media_id, token=None):
     if token is None:
@@ -251,24 +292,38 @@ def get_permalink(media_id, token=None):
     r.raise_for_status()
     return r.json()["permalink"]
 
-def _post_text_to_threads(threads_user_id: str, text: str, token: str, logger: Logger = None):
+def _post_text_to_threads(user_id: str, text: str, token: str, logger: Logger = None):
     """Create, publish, and return metadata for a single Threads post."""
-    _emit("📦 컨테이너 생성 중...", logger)
-    creation_id = create_text_container(threads_user_id, text, token=token)
-
-    _emit("🚀 Threads에 게시 중...", logger)
-    media_id = publish_container(threads_user_id, creation_id, token=token)
-
-    _emit("🔗 Permalink 가져오는 중...", logger)
-    permalink = get_permalink(media_id, token=token)
-
-    return {
-        "media_id": media_id,
-        "creation_id": creation_id,
-        "permalink": permalink,
-        "text": text,
-        "user_id": threads_user_id,
-    }
+    try:
+        # 1. Create Container
+        _emit("📦 컨테이너 생성 중...", logger)
+        container_id = create_text_container(user_id, text, token, logger)
+        _emit(f"컨테이너 생성 완료 ID: {container_id}", logger)
+        
+        # 2. Check Status (Safety wait)
+        if not check_container_status(container_id, token, logger):
+            _emit("❌ 컨테이너가 준비되지 않아 게시를 중단합니다.", logger)
+            return None
+            
+        # 3. Publish
+        _emit("🚀 Threads에 게시 중...", logger)
+        publish_result = publish_container(user_id, container_id, token, logger)
+        media_id = publish_result.get('id')
+        
+        # 4. Get Permalink
+        _emit("🔗 Permalink 가져오는 중...", logger)
+        permalink = get_permalink(media_id, token=token)
+        
+        return {
+            "media_id": media_id,
+            "creation_id": container_id,
+            "permalink": permalink,
+            "text": text,
+            "user_id": user_id,
+        }
+    except Exception as e:
+        _emit(f"❌ Threads 게시 프로세스 오류: {e}", logger)
+        return None
 
 
 def post_gpt_generated_text(
