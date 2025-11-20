@@ -3,7 +3,8 @@ from google.oauth2.service_account import Credentials
 import os
 
 # Constants
-SERVICE_ACCOUNT_FILE = 'autosavingprojectforemails-c21ae4b88ab5.json'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, 'autosavingprojectforemails-c21ae4b88ab5.json')
 SPREADSHEET_ID = '1AFkVyDTZ5QHk-pzrTY5OGZB5-aM24Esq-PU8cRpADWM'
 SHEET_NAME = '쓰레드'
 
