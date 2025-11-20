@@ -2,7 +2,7 @@ import os
 import time
 from typing import List
 import streamlit as st
-from post_to_threads import generate_text_with_ai, _post_text_to_threads, me, get_token
+from post_to_threads import ContentGenerator, _post_text_to_threads, me, get_token
 import google_sheets
 
 st.set_page_config(page_title="Threads Auto Poster", page_icon="🧵")
@@ -77,11 +77,18 @@ with tab1:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
+                # Initialize Generator Session
+                generator = ContentGenerator(model=model)
+                
                 for i in range(gen_count):
                     status_text.text(f"[{i+1}/{gen_count}] 콘텐츠 생성 중...")
                     
+                    # First iteration: Use user prompt
+                    # Subsequent: Use "continue" prompt
+                    current_prompt = prompt if i == 0 else "위의 지침에 따라 새로운 게시글을 하나 더 작성해줘. (이전과 겹치지 않게)"
+                    
                     with st.spinner(f"{model}로 {i+1}번째 콘텐츠 생성 중..."):
-                        generated_text = generate_text_with_ai(model=model, prompt=prompt)
+                        generated_text = generator.generate(current_prompt)
                     
                     # Show preview of the last generated text
                     if i == gen_count - 1:

@@ -115,119 +115,82 @@ def get_google_api_key():
         raise ValueError("GOOGLE_API_KEY가 .env 파일에 설정되지 않았습니다.")
     return api_key.strip().strip('"').strip("'")
 
-def generate_text_with_gemini(prompt=None, logger: Logger = None):
-    """
-    Google Gemini를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
-    
-    Args:
-        prompt (str): 사용자 입력 프롬프트
-        logger (Logger, optional): 로그 함수
-    
-    Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
-    """
-    if not GOOGLE_GENAI_AVAILABLE:
-        raise ImportError("google-genai 라이브러리가 설치되지 않았습니다. pip install google-genai를 실행해주세요.")
-    
-    # 환경 변수에서 Google API 키 로드
-    api_key = get_google_api_key()
-    
-    # Gemini 클라이언트 초기화
-    client = google_genai.Client(api_key=api_key)
-    
-    try:
-        # Gemini API 호출
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
+class ContentGenerator:
+    def __init__(self, model="gemini-2.5-flash", logger: Logger = None):
+        self.model = model
+        self.logger = logger
+        self.history = [] # For GPT
+        self.gemini_chat = None # For Gemini
         
-        # 생성된 콘텐츠 추출
-        content = response.text.strip()
-        
-        # 따옴표 제거 (있는 경우)
-        if content.startswith('"') and content.endswith('"'):
-            content = content[1:-1]
-        elif content.startswith("'") and content.endswith("'"):
-            content = content[1:-1]
-        
-        _emit(f"✅ Gemini 콘텐츠 생성 완료 ({len(content)}자)", logger)
-        return content
-        
-    except Exception as e:
-        _emit(f"❌ Gemini 콘텐츠 생성 중 오류 발생: {e}", logger)
-        raise
+        if model.startswith("gemini"):
+            if not GOOGLE_GENAI_AVAILABLE:
+                raise ImportError("google-genai 라이브러리가 설치되지 않았습니다.")
+            api_key = get_google_api_key()
+            client = google_genai.Client(api_key=api_key)
+            # Gemini chat session initialization
+            self.gemini_chat = client.chats.create(model="gemini-2.5-flash")
+            
+        elif model.startswith("gpt"):
+            self.api_key = os.getenv('OPENAI_API_KEY')
+            if not self.api_key:
+                raise ValueError("OPENAI_API_KEY가 필요합니다.")
+            self.client = OpenAI(api_key=self.api_key.strip().strip('"').strip("'"))
+            # System prompt can be set initially if needed, but we'll just start empty
+            self.history = [
+                {"role": "system", "content": "당신은 SNS 카피라이팅 전문가입니다. Meta Threads에 최적화된 반말/구어체 글을 작성합니다."}
+            ]
 
-def generate_text_with_gpt(prompt=None, logger: Logger = None):
-    """
-    GPT를 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
-    
-    Args:
-        prompt (str): 사용자 입력 프롬프트
-        logger (Logger, optional): 로그 함수
-    
-    Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
-    """
-    # 환경 변수에서 OpenAI API 키 로드
-    api_key = os.getenv('OPENAI_API_KEY')
-    model = 'gpt-4o'
-    
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY가 .env 파일에 설정되지 않았습니다.")
-    
-    # OpenAI 클라이언트 초기화
-    client = OpenAI(api_key=api_key.strip().strip('"').strip("'"))
-    
-    try:
-        # GPT API 호출
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
-        
-        # 생성된 콘텐츠 추출
-        content = response.choices[0].message.content.strip()
-        
-        # 따옴표 제거 (있는 경우)
-        if content.startswith('"') and content.endswith('"'):
-            content = content[1:-1]
-        elif content.startswith("'") and content.endswith("'"):
-            content = content[1:-1]
-        
-        _emit(f"✅ GPT 콘텐츠 생성 완료 ({len(content)}자)", logger)
-        return content
-        
-    except Exception as e:
-        _emit(f"❌ GPT 콘텐츠 생성 중 오류 발생: {e}", logger)
-        raise
+    def generate(self, prompt: str) -> str:
+        if self.model.startswith("gemini"):
+            return self._generate_gemini(prompt)
+        else:
+            return self._generate_gpt(prompt)
 
-def generate_text_with_ai(
-    model="gpt-4o",
-    prompt=None,
-    logger: Logger = None
-):
-    """
-    AI 모델을 사용하여 Threads용 텍스트 콘텐츠를 생성합니다.
-    
-    Args:
-        model (str): 사용할 AI 모델 ("gpt-4o" 또는 "gemini-2.5-flash")
-        prompt (str): 사용자 입력 프롬프트
-        logger (Logger, optional): 로그 함수
-    
-    Returns:
-        str: 생성된 Threads 텍스트 콘텐츠
-    """
-    if model.startswith("gpt") or model == "gpt-4o":
-        return generate_text_with_gpt(prompt=prompt, logger=logger)
-    elif model.startswith("gemini") or model == "gemini-2.5-flash":
-        return generate_text_with_gemini(prompt=prompt, logger=logger)
-    else:
-        raise ValueError(f"지원하지 않는 모델입니다: {model}. 'gpt-4o' 또는 'gemini-2.5-flash'를 사용해주세요.")
+    def _generate_gemini(self, prompt: str) -> str:
+        try:
+            response = self.gemini_chat.send_message(prompt)
+            content = response.text.strip()
+            content = self._clean_content(content)
+            _emit(f"✅ Gemini 생성 완료 ({len(content)}자)", self.logger)
+            return content
+        except Exception as e:
+            _emit(f"❌ Gemini 오류: {e}", self.logger)
+            raise
+
+    def _generate_gpt(self, prompt: str) -> str:
+        try:
+            self.history.append({"role": "user", "content": prompt})
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=self.history,
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            content = response.choices[0].message.content.strip()
+            content = self._clean_content(content)
+            
+            # Add assistant response to history
+            self.history.append({"role": "assistant", "content": content})
+            
+            _emit(f"✅ GPT 생성 완료 ({len(content)}자)", self.logger)
+            return content
+        except Exception as e:
+            _emit(f"❌ GPT 오류: {e}", self.logger)
+            raise
+
+    def _clean_content(self, content: str) -> str:
+        if content.startswith('"') and content.endswith('"'):
+            return content[1:-1]
+        elif content.startswith("'") and content.endswith("'"):
+            return content[1:-1]
+        return content
+
+# Legacy wrapper for backward compatibility if needed, or just remove
+def generate_text_with_ai(model="gpt-4o", prompt=None, logger: Logger = None):
+    generator = ContentGenerator(model=model, logger=logger)
+    return generator.generate(prompt)
 
 def me(token=None):
     if token is None:
