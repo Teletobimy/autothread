@@ -193,6 +193,20 @@ class ContentGenerator:
             _emit(f"❌ GPT 오류: {e}", self.logger)
             raise
 
+    def translate(self, text: str, target_language: str) -> str:
+        prompt = f"""
+        Translate the following text to {target_language}. 
+        Only output the translated text, without any additional explanation or quotes.
+        
+        Text to translate:
+        {text}
+        """
+        
+        if self.model.startswith("gemini"):
+            return self._generate_gemini(prompt)
+        else:
+            return self._generate_gpt(prompt)
+
     def _clean_content(self, content: str) -> str:
         if content.startswith('"') and content.endswith('"'):
             return content[1:-1]

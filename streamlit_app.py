@@ -48,7 +48,7 @@ with st.sidebar:
     st.write(f"GCP Service Account: {'✅' if has_gcp_creds else '❌'}")
 
 # --- Tabs ---
-tab1, tab2 = st.tabs(["📝 콘텐츠 생성", "🚀 자동 게시"])
+tab1, tab2, tab3 = st.tabs(["📝 콘텐츠 생성", "🌐 자동 번역", "🚀 자동 게시"])
 
 # --- Tab 1: Generate Content ---
 with tab1:
@@ -59,7 +59,8 @@ with tab1:
     model = st.selectbox(
         "AI 모델 선택",
         options=["gpt-4o", "gemini-2.5-flash"],
-        index=1
+        index=1,
+        key="gen_model"
     )
 
     prompt = st.text_area("프롬프트 입력", height=200, placeholder="AI에게 요청할 내용을 상세히 적어주세요.")
@@ -106,8 +107,66 @@ with tab1:
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 
-# --- Tab 2: Auto Post ---
+# --- Tab 2: Auto Translation ---
 with tab2:
+    st.header("자동 번역 (Auto Translation)")
+    st.info("'쓰레드' 시트의 A열에 있는 모든 콘텐츠를 번역하여 각 언어별 시트(영어, 스페인어)의 A열에 저장합니다.")
+    
+    trans_model = st.selectbox(
+        "번역 AI 모델 선택",
+        options=["gpt-4o", "gemini-2.5-flash"],
+        index=1,
+        key="trans_model"
+    )
+    
+    target_lang = st.radio(
+        "번역 대상 언어",
+        options=["영어", "스페인어", "둘 다 (영어 + 스페인어)"],
+        horizontal=True
+    )
+    
+    if st.button("번역 시작", type="primary"):
+        if (trans_model == "gpt-4o" and not openai_key) or (trans_model == "gemini-2.5-flash" and not google_key):
+            st.error(f"{trans_model} 사용을 위한 API 키가 필요합니다.")
+        else:
+            try:
+                with st.spinner("대기열('쓰레드' 시트 A열)을 불러오는 중..."):
+                    contents = google_sheets.get_all_from_queue()
+                
+                if not contents:
+                    st.warning("번역할 콘텐츠가 없습니다. ('쓰레드' 시트 A열이 비어있음)")
+                else:
+                    st.write(f"총 {len(contents)}개의 콘텐츠를 번역합니다.")
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    generator = ContentGenerator(model=trans_model)
+                    
+                    for i, text in enumerate(contents):
+                        status_text.text(f"[{i+1}/{len(contents)}] 번역 중...")
+                        
+                        targets = []
+                        if target_lang == "영어" or target_lang == "둘 다 (영어 + 스페인어)":
+                            targets.append(("English", "영어"))
+                        if target_lang == "스페인어" or target_lang == "둘 다 (영어 + 스페인어)":
+                            targets.append(("Spanish", "스페인어"))
+                            
+                        for lang_code, sheet_name in targets:
+                            with st.spinner(f"[{i+1}/{len(contents)}] {lang_code}로 번역 중..."):
+                                translated = generator.translate(text, lang_code)
+                                google_sheets.append_to_sheet(translated, sheet_name=sheet_name)
+                        
+                        progress_bar.progress((i + 1) / len(contents))
+                        time.sleep(1)
+                    
+                    status_text.text("번역 완료!")
+                    st.success(f"✅ {len(contents)}개의 콘텐츠 번역이 완료되었습니다.")
+                    
+            except Exception as e:
+                st.error(f"오류 발생: {e}")
+
+# --- Tab 3: Auto Post ---
+with tab3:
     st.header("자동 게시 (Auto Posting)")
     st.info("구글 스프레드시트 A열의 콘텐츠를 순서대로 가져와 Threads에 게시합니다.")
     st.warning("⚠️ 주의: 자동 게시가 진행되는 동안에는 이 브라우저 탭을 닫거나 새로고침하지 마세요. (탭이 닫히면 중단됩니다)")
