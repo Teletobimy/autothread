@@ -2,9 +2,8 @@ name: Deploy to Firebase & Cloud Run
 
 on:
   push:
-    branches:
-      - main
-      - master
+    tags:
+      - 'v*'  # v로 시작하는 태그만 배포 (예: v1.0.0, v1.2.3)
 
 env:
   PROJECT_ID: project-4d38b
