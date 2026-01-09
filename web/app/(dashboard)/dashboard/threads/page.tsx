@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { addToQueue, getQueue, Post } from '@/lib/firestore';
+import { useTranslation } from '@/contexts/LanguageContext';
+import { getQueue, deletePost, Post } from '@/lib/firestore';
 import { api } from '@/lib/config';
 
 type TabType = 'generate' | 'translate' | 'queue' | 'post';
@@ -11,12 +12,13 @@ type TabType = 'generate' | 'translate' | 'queue' | 'post';
 export default function ThreadsPage() {
   const { user } = useAuth();
   const { currentOrg } = useOrganization();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('generate');
 
   if (!currentOrg) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-gray-400">Loading...</div>
+        <div className="text-gray-400">{t.common.loading}</div>
       </div>
     );
   }
@@ -29,25 +31,25 @@ export default function ThreadsPage() {
           🧵
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Threads Auto Poster</h1>
-          <p className="text-gray-400">AI-powered content generation and auto-posting</p>
+          <h1 className="text-2xl font-bold text-white">{t.dashboard.threads.title}</h1>
+          <p className="text-gray-400">{t.dashboard.threads.description}</p>
         </div>
       </div>
 
       {/* Tab Navigation */}
       <div className="flex gap-2 p-1 rounded-xl bg-white/5">
-        <TabButton active={activeTab === 'generate'} onClick={() => setActiveTab('generate')} label="Generate" />
+        <TabButton active={activeTab === 'generate'} onClick={() => setActiveTab('generate')} label={t.dashboard.threads.generate} />
         <TabButton active={activeTab === 'translate'} onClick={() => setActiveTab('translate')} label="Translate" />
-        <TabButton active={activeTab === 'queue'} onClick={() => setActiveTab('queue')} label="Queue" />
+        <TabButton active={activeTab === 'queue'} onClick={() => setActiveTab('queue')} label={t.dashboard.threads.queue} />
         <TabButton active={activeTab === 'post'} onClick={() => setActiveTab('post')} label="Post" />
       </div>
 
       {/* Content */}
       <div className="glass rounded-2xl border border-white/10 p-6">
-        {activeTab === 'generate' && <GenerateContent orgId={currentOrg.id} userId={user?.uid || ''} />}
-        {activeTab === 'translate' && <TranslateContent orgId={currentOrg.id} />}
-        {activeTab === 'queue' && <QueueContent orgId={currentOrg.id} />}
-        {activeTab === 'post' && <PostContent orgId={currentOrg.id} />}
+        {activeTab === 'generate' && <GenerateContent orgId={currentOrg.id} userId={user?.uid || ''} t={t} />}
+        {activeTab === 'translate' && <TranslateContent orgId={currentOrg.id} t={t} />}
+        {activeTab === 'queue' && <QueueContent orgId={currentOrg.id} t={t} />}
+        {activeTab === 'post' && <PostContent orgId={currentOrg.id} t={t} />}
       </div>
     </div>
   );
@@ -69,7 +71,7 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
 }
 
 // Generate Content Tab
-function GenerateContent({ orgId, userId }: { orgId: string; userId: string }) {
+function GenerateContent({ orgId, userId, t }: { orgId: string; userId: string; t: any }) {
   const [prompt, setPrompt] = useState('');
   const [count, setCount] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -149,7 +151,7 @@ function GenerateContent({ orgId, userId }: { orgId: string; userId: string }) {
         disabled={loading || !prompt.trim()}
         className="w-full btn-primary py-4 rounded-xl text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Generating...' : 'Generate Content'}
+        {loading ? t.common.loading : t.dashboard.threads.generate}
       </button>
 
       {result && (
@@ -168,7 +170,7 @@ function GenerateContent({ orgId, userId }: { orgId: string; userId: string }) {
 }
 
 // Translate Content Tab
-function TranslateContent({ orgId }: { orgId: string }) {
+function TranslateContent({ orgId, t }: { orgId: string; t: any }) {
   const [targetLang, setTargetLang] = useState('english');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -233,7 +235,7 @@ function TranslateContent({ orgId }: { orgId: string }) {
         disabled={loading}
         className="w-full btn-primary py-4 rounded-xl text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Translating...' : 'Translate Pending Posts'}
+        {loading ? t.common.loading : 'Translate Pending Posts'}
       </button>
 
       {result && (
@@ -252,10 +254,11 @@ function TranslateContent({ orgId }: { orgId: string }) {
 }
 
 // Queue Content Tab
-function QueueContent({ orgId }: { orgId: string }) {
+function QueueContent({ orgId, t }: { orgId: string; t: any }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'posted'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPosts();
@@ -274,25 +277,60 @@ function QueueContent({ orgId }: { orgId: string }) {
     }
   };
 
+  const handleDelete = async (postId: string) => {
+    if (!confirm('Are you sure you want to delete this post?')) {
+      return;
+    }
+
+    setDeletingId(postId);
+    try {
+      await deletePost(orgId, postId);
+      setPosts(posts.filter(p => p.id !== postId));
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+      alert('Failed to delete post');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-white">Post Queue</h3>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as 'all' | 'pending' | 'posted')}
-          className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
-        >
-          <option value="all">All</option>
-          <option value="pending">Pending</option>
-          <option value="posted">Posted</option>
-        </select>
+        <div className="flex items-center gap-4">
+          <h3 className="text-lg font-medium text-white">{t.dashboard.threads.queue}</h3>
+          <span className="px-2 py-1 rounded-full bg-white/10 text-gray-400 text-xs">
+            {posts.length} posts
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadPosts}
+            disabled={loading}
+            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            title="Refresh"
+          >
+            <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as 'all' | 'pending' | 'posted')}
+            className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm"
+          >
+            <option value="all">{t.common.all}</option>
+            <option value="pending">{t.dashboard.threads.pending}</option>
+            <option value="posted">{t.dashboard.threads.posted}</option>
+          </select>
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-gray-400">Loading...</div>
+        <div className="text-center py-8 text-gray-400">{t.common.loading}</div>
       ) : posts.length === 0 ? (
-        <div className="text-center py-8 text-gray-400">
+        <div className="text-center py-12 text-gray-400">
+          <div className="text-4xl mb-4">📭</div>
           <p>No posts in queue</p>
           <p className="text-sm mt-1">Generate content to get started</p>
         </div>
@@ -301,21 +339,66 @@ function QueueContent({ orgId }: { orgId: string }) {
           {posts.map((post) => (
             <div
               key={post.id}
-              className="p-4 rounded-xl bg-white/5 border border-white/10"
+              className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/[0.07] transition-colors group"
             >
               <div className="flex items-start justify-between gap-4">
-                <p className="text-white text-sm flex-1">{post.text}</p>
-                <span className={`px-2 py-1 rounded-full text-xs ${
-                  post.status === 'posted' ? 'bg-green-500/20 text-green-400' :
-                  post.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-red-500/20 text-red-400'
-                }`}>
-                  {post.status}
-                </span>
+                <p className="text-white text-sm flex-1 whitespace-pre-wrap">{post.text}</p>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                    post.status === 'posted' ? 'bg-green-500/20 text-green-400' :
+                    post.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-red-500/20 text-red-400'
+                  }`}>
+                    {post.status === 'posted' ? t.dashboard.threads.posted : 
+                     post.status === 'pending' ? t.dashboard.threads.pending : 
+                     t.dashboard.threads.failed}
+                  </span>
+                  {post.status === 'pending' && (
+                    <button
+                      onClick={() => post.id && handleDelete(post.id)}
+                      disabled={deletingId === post.id}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                      title={t.common.delete}
+                    >
+                      {deletingId === post.id ? (
+                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-                <span>{post.language}</span>
-                <span>{post.model}</span>
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  {post.language}
+                </span>
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  {post.model}
+                </span>
+                {post.permalink && (
+                  <a 
+                    href={post.permalink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-400 hover:underline"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    View
+                  </a>
+                )}
               </div>
             </div>
           ))}
@@ -326,7 +409,7 @@ function QueueContent({ orgId }: { orgId: string }) {
 }
 
 // Post Content Tab
-function PostContent({ orgId }: { orgId: string }) {
+function PostContent({ orgId, t }: { orgId: string; t: any }) {
   const [interval, setInterval] = useState(60);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -391,7 +474,7 @@ function PostContent({ orgId }: { orgId: string }) {
         disabled={loading}
         className="w-full btn-primary py-4 rounded-xl text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Starting...' : 'Start Auto Posting'}
+        {loading ? t.common.loading : 'Start Auto Posting'}
       </button>
 
       {result && (
