@@ -38,7 +38,7 @@ export default function MarketingLayout({
               </Link>
               <LanguageSelector />
               <Link
-                href="/signup"
+                href="/dashboard/threads"
                 className="btn-primary px-5 py-2.5 rounded-lg text-white font-medium"
               >
                 {t.nav.getStarted}

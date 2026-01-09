@@ -17,6 +17,8 @@ export const ko = {
     submit: '제출',
     confirm: '확인',
     close: '닫기',
+    demoMode: '데모 모드',
+    demoModeDescription: '데이터를 저장하려면 로그인하세요',
   },
 
   // Navigation

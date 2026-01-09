@@ -19,6 +19,8 @@ export const en: TranslationKeys = {
     submit: 'Submit',
     confirm: 'Confirm',
     close: 'Close',
+    demoMode: 'Demo Mode',
+    demoModeDescription: 'Login to save your data',
   },
 
   // Navigation

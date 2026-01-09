@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,7 +37,7 @@ function SettingsIcon({ className }: { className?: string }) {
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isDemo, enableDemoMode, disableDemoMode } = useAuth();
   const { currentOrg, organizations, loading: orgLoading, switchOrganization } = useOrganization();
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -50,19 +50,26 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     { name: t.settings.title, href: '/dashboard/settings', icon: SettingsIcon },
   ];
 
-  // Redirect to login if not authenticated
-  if (!authLoading && !user) {
-    router.push('/login');
-    return null;
-  }
+  // Auto-enable demo mode if not authenticated (for direct access)
+  useEffect(() => {
+    if (!authLoading && !user && !isDemo) {
+      enableDemoMode();
+    }
+  }, [authLoading, user, isDemo, enableDemoMode]);
 
-  // Redirect to onboarding if no organization
-  if (!orgLoading && user && organizations.length === 0) {
+  // Show demo banner and skip auth redirects in demo mode
+  // Redirect to onboarding only for real users without organizations
+  if (!isDemo && !orgLoading && user && organizations.length === 0) {
     router.push('/onboarding');
     return null;
   }
 
   const handleSignOut = async () => {
+    if (isDemo) {
+      disableDemoMode();
+      router.push('/');
+      return;
+    }
     await signOut();
     router.push('/');
   };
@@ -229,6 +236,26 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-64">
+        {/* Demo mode banner */}
+        {isDemo && (
+          <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-b border-amber-500/30 px-4 py-3">
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-400">🎮</span>
+                <span className="text-amber-200 text-sm">
+                  {t.common.demoMode || 'Demo Mode'} - {t.common.demoModeDescription || 'Login to save your data'}
+                </span>
+              </div>
+              <Link
+                href="/login"
+                onClick={() => disableDemoMode()}
+                className="px-4 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 text-sm font-medium transition-colors"
+              >
+                {t.nav.login || 'Login'}
+              </Link>
+            </div>
+          </div>
+        )}
         <div className="p-6 lg:p-8">
           {children}
         </div>

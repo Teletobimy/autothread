@@ -31,10 +31,30 @@ interface OrganizationContextType {
   refreshOrganizations: () => Promise<void>;
 }
 
+// Demo mode mock data
+const DEMO_ORG: Organization = {
+  id: 'demo-org-id',
+  name: 'Demo Organization',
+  plan: 'pro',
+  ownerId: 'demo-user-id',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const DEMO_USER_PROFILE: UserProfile = {
+  id: 'demo-user-id',
+  email: 'demo@example.com',
+  displayName: 'Demo User',
+  orgIds: ['demo-org-id'],
+  currentOrgId: 'demo-org-id',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
 export function OrganizationProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDemo } = useAuth();
   
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -50,6 +70,16 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setOrganizations([]);
       setUserProfile(null);
       setMemberRole(null);
+      setLoading(false);
+      return;
+    }
+
+    // Handle demo mode with mock data
+    if (isDemo) {
+      setUserProfile(DEMO_USER_PROFILE);
+      setOrganizations([DEMO_ORG]);
+      setCurrentOrg(DEMO_ORG);
+      setMemberRole('owner');
       setLoading(false);
       return;
     }
@@ -92,7 +122,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isDemo]);
 
   useEffect(() => {
     loadUserData();

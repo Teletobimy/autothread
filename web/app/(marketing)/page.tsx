@@ -106,7 +106,7 @@ export default function LandingPage() {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in-up opacity-0" style={{ animationDelay: '0.3s', animationFillMode: 'forwards' }}>
             <Link
-              href="/signup"
+              href="/dashboard/threads"
               className="btn-primary px-8 py-4 rounded-xl text-white font-semibold text-lg glow"
             >
               {t.landing.ctaStart}
@@ -230,7 +230,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Link
-                  href="/signup"
+                  href="/dashboard/threads"
                   className={`block w-full py-3 rounded-xl font-semibold text-center transition-all ${
                     plan.featured
                       ? 'btn-primary text-white'
@@ -260,7 +260,7 @@ export default function LandingPage() {
                 {t.cta.subtitle}
               </p>
               <Link
-                href="/signup"
+                href="/dashboard/threads"
                 className="inline-block btn-primary px-10 py-4 rounded-xl text-white font-semibold text-lg glow animate-pulse-glow"
               >
                 {t.cta.button}
