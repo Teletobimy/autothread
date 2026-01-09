@@ -1,98 +1,85 @@
+'use client';
+
 import Link from 'next/link';
-
-const features = [
-  {
-    icon: '🧵',
-    title: 'Threads Auto Poster',
-    description: 'AI-generated content automatically posted to Meta Threads. Schedule, translate, and manage your social presence.',
-    color: 'from-pink-500 to-rose-500',
-  },
-  {
-    icon: '📊',
-    title: 'Sheets Manager',
-    description: 'Seamlessly sync data between Google Sheets and your applications. Automate data workflows effortlessly.',
-    color: 'from-green-500 to-emerald-500',
-    comingSoon: true,
-  },
-  {
-    icon: '🤖',
-    title: 'AI Assistant',
-    description: 'Powered by Gemini AI for content generation, translation, and intelligent automation.',
-    color: 'from-blue-500 to-cyan-500',
-  },
-  {
-    icon: '🔗',
-    title: 'URL Shortener',
-    description: 'Create branded short links with analytics. Track clicks and optimize your marketing campaigns.',
-    color: 'from-orange-500 to-amber-500',
-    comingSoon: true,
-  },
-  {
-    icon: '📝',
-    title: 'Content Scheduler',
-    description: 'Plan and schedule your content across multiple platforms. Never miss the perfect posting time.',
-    color: 'from-purple-500 to-violet-500',
-    comingSoon: true,
-  },
-  {
-    icon: '📈',
-    title: 'Analytics Dashboard',
-    description: 'Track performance across all your tools. Get insights to optimize your workflow.',
-    color: 'from-indigo-500 to-blue-500',
-    comingSoon: true,
-  },
-];
-
-const plans = [
-  {
-    name: 'Free',
-    price: '$0',
-    period: '/month',
-    description: 'Perfect for getting started',
-    features: [
-      '1 tool access',
-      '100 posts/month',
-      '1 team member',
-      'Community support',
-    ],
-    cta: 'Start Free',
-    featured: false,
-  },
-  {
-    name: 'Pro',
-    price: '$19',
-    period: '/month',
-    description: 'For growing teams',
-    features: [
-      'All tools access',
-      '1,000 posts/month',
-      '5 team members',
-      'Priority support',
-      'Advanced analytics',
-      'Custom branding',
-    ],
-    cta: 'Start Pro Trial',
-    featured: true,
-  },
-  {
-    name: 'Enterprise',
-    price: '$49',
-    period: '/month',
-    description: 'For large organizations',
-    features: [
-      'Everything in Pro',
-      'Unlimited posts',
-      'Unlimited members',
-      'Dedicated support',
-      'Custom integrations',
-      'SLA guarantee',
-    ],
-    cta: 'Contact Sales',
-    featured: false,
-  },
-];
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export default function LandingPage() {
+  const { t } = useTranslation();
+
+  const features = [
+    {
+      icon: '🧵',
+      title: t.features.threads.title,
+      description: t.features.threads.description,
+      color: 'from-pink-500 to-rose-500',
+    },
+    {
+      icon: '📊',
+      title: t.features.sheets.title,
+      description: t.features.sheets.description,
+      color: 'from-green-500 to-emerald-500',
+      comingSoon: true,
+    },
+    {
+      icon: '🤖',
+      title: t.features.ai.title,
+      description: t.features.ai.description,
+      color: 'from-blue-500 to-cyan-500',
+    },
+    {
+      icon: '🔗',
+      title: t.features.url.title,
+      description: t.features.url.description,
+      color: 'from-orange-500 to-amber-500',
+      comingSoon: true,
+    },
+    {
+      icon: '📝',
+      title: t.features.scheduler.title,
+      description: t.features.scheduler.description,
+      color: 'from-purple-500 to-violet-500',
+      comingSoon: true,
+    },
+    {
+      icon: '📈',
+      title: t.features.analytics.title,
+      description: t.features.analytics.description,
+      color: 'from-indigo-500 to-blue-500',
+      comingSoon: true,
+    },
+  ];
+
+  const plans = [
+    {
+      name: t.pricing.free.name,
+      price: t.pricing.free.price,
+      period: t.pricing.perMonth,
+      description: t.pricing.free.description,
+      features: t.pricing.free.features,
+      cta: t.pricing.free.cta,
+      featured: false,
+    },
+    {
+      name: t.pricing.pro.name,
+      price: t.pricing.pro.price,
+      period: t.pricing.perMonth,
+      description: t.pricing.pro.description,
+      features: t.pricing.pro.features,
+      cta: t.pricing.pro.cta,
+      featured: true,
+      popular: t.pricing.pro.popular,
+    },
+    {
+      name: t.pricing.enterprise.name,
+      price: t.pricing.enterprise.price,
+      period: t.pricing.perMonth,
+      description: t.pricing.enterprise.description,
+      features: t.pricing.enterprise.features,
+      cta: t.pricing.enterprise.cta,
+      featured: false,
+    },
+  ];
+
   return (
     <div className="hero-pattern grid-pattern">
       {/* Hero Section */}
@@ -101,19 +88,19 @@ export default function LandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border border-white/10 mb-8 animate-fade-in">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            <span className="text-sm text-gray-300">Now with Gemini AI Integration</span>
+            <span className="text-sm text-gray-300">{t.landing.badge}</span>
           </div>
 
           {/* Headline */}
           <h1 className="text-5xl md:text-7xl font-bold mb-6 animate-fade-in-up opacity-0" style={{ animationDelay: '0.1s', animationFillMode: 'forwards' }}>
-            Supercharge Your
+            {t.landing.headline}
             <br />
-            <span className="gradient-text">Workflow with AI</span>
+            <span className="gradient-text">{t.landing.headlineHighlight}</span>
           </h1>
 
           {/* Subheadline */}
           <p className="text-xl md:text-2xl text-gray-400 mb-10 max-w-3xl mx-auto animate-fade-in-up opacity-0" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-            AI-powered automation tools for content generation, social media management, and team collaboration. Built for modern teams.
+            {t.landing.subheadline}
           </p>
 
           {/* CTA Buttons */}
@@ -122,35 +109,35 @@ export default function LandingPage() {
               href="/signup"
               className="btn-primary px-8 py-4 rounded-xl text-white font-semibold text-lg glow"
             >
-              Get Started Free
+              {t.landing.ctaStart}
             </Link>
             <Link
               href="#features"
               className="btn-secondary px-8 py-4 rounded-xl text-white font-semibold text-lg"
             >
-              See Features
+              {t.landing.ctaFeatures}
             </Link>
           </div>
 
           {/* Trust badges */}
-          <div className="mt-16 flex items-center justify-center gap-8 text-gray-500 animate-fade-in-up opacity-0" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-6 md:gap-8 text-gray-500 animate-fade-in-up opacity-0" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-sm">No credit card required</span>
+              <span className="text-sm">{t.landing.trustBadge1}</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-sm">Free forever plan</span>
+              <span className="text-sm">{t.landing.trustBadge2}</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              <span className="text-sm">Cancel anytime</span>
+              <span className="text-sm">{t.landing.trustBadge3}</span>
             </div>
           </div>
         </div>
@@ -162,12 +149,12 @@ export default function LandingPage() {
           {/* Section header */}
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Everything you need to
+              {t.features.title}
               <br />
-              <span className="gradient-text">automate your work</span>
+              <span className="gradient-text">{t.features.titleHighlight}</span>
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              A suite of powerful AI tools designed to save you time and boost productivity.
+              {t.features.subtitle}
             </p>
           </div>
 
@@ -181,7 +168,7 @@ export default function LandingPage() {
               >
                 {feature.comingSoon && (
                   <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-white/10 text-xs text-gray-300">
-                    Coming Soon
+                    {t.features.comingSoon}
                   </div>
                 )}
                 <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center text-2xl mb-4`}>
@@ -201,12 +188,12 @@ export default function LandingPage() {
           {/* Section header */}
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Simple, transparent
+              {t.pricing.title}
               <br />
-              <span className="gradient-text">pricing</span>
+              <span className="gradient-text">{t.pricing.titleHighlight}</span>
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Start free, upgrade when you need more. No hidden fees.
+              {t.pricing.subtitle}
             </p>
           </div>
 
@@ -221,9 +208,9 @@ export default function LandingPage() {
                     : 'border-white/10 glass'
                 }`}
               >
-                {plan.featured && (
+                {plan.featured && plan.popular && (
                   <div className="inline-block px-3 py-1 rounded-full gradient-bg text-xs text-white font-medium mb-4">
-                    Most Popular
+                    {plan.popular}
                   </div>
                 )}
                 <h3 className="text-2xl font-bold text-white">{plan.name}</h3>
@@ -267,16 +254,16 @@ export default function LandingPage() {
             
             <div className="relative z-10">
               <h2 className="text-4xl md:text-5xl font-bold mb-4">
-                Ready to get started?
+                {t.cta.title}
               </h2>
               <p className="text-xl text-gray-400 mb-8 max-w-xl mx-auto">
-                Join thousands of teams already using Utilix to automate their workflows.
+                {t.cta.subtitle}
               </p>
               <Link
                 href="/signup"
                 className="inline-block btn-primary px-10 py-4 rounded-xl text-white font-semibold text-lg glow animate-pulse-glow"
               >
-                Start Free Today
+                {t.cta.button}
               </Link>
             </div>
           </div>

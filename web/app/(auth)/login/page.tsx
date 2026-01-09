@@ -4,9 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle, signInWithEmail } from '@/lib/auth';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,8 +45,8 @@ export default function LoginPage() {
     <div className="w-full max-w-md">
       <div className="glass rounded-2xl border border-white/10 p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-          <p className="text-gray-400">Sign in to your account to continue</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t.auth.welcomeBack}</h1>
+          <p className="text-gray-400">{t.auth.loginSubtitle}</p>
         </div>
 
         {error && (
@@ -65,7 +67,7 @@ export default function LoginPage() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
-          Continue with Google
+          {t.auth.google}
         </button>
 
         <div className="relative mb-6">
@@ -73,7 +75,7 @@ export default function LoginPage() {
             <div className="w-full border-t border-white/10"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-[#0a0a0f] text-gray-500">or</span>
+            <span className="px-4 bg-[#0a0a0f] text-gray-500">{t.auth.orContinueWith}</span>
           </div>
         </div>
 
@@ -81,7 +83,7 @@ export default function LoginPage() {
         <form onSubmit={handleEmailSignIn} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-              Email
+              {t.auth.email}
             </label>
             <input
               id="email"
@@ -95,7 +97,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-              Password
+              {t.auth.password}
             </label>
             <input
               id="password"
@@ -107,13 +109,9 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 text-gray-400">
-              <input type="checkbox" className="rounded bg-white/5 border-white/10" />
-              Remember me
-            </label>
+          <div className="flex items-center justify-end text-sm">
             <Link href="/forgot-password" className="text-[var(--gradient-start)] hover:underline">
-              Forgot password?
+              {t.auth.forgotPassword}
             </Link>
           </div>
           <button
@@ -121,14 +119,14 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full btn-primary py-3 rounded-xl text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? t.common.loading : t.auth.login}
           </button>
         </form>
 
         <p className="mt-6 text-center text-gray-400">
-          Don&apos;t have an account?{' '}
+          {t.auth.noAccount}{' '}
           <Link href="/signup" className="text-[var(--gradient-start)] hover:underline">
-            Sign up
+            {t.auth.signupNow}
           </Link>
         </p>
       </div>
