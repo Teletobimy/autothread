@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User } from 'firebase/auth';
-import { onAuthChange } from '@/lib/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -19,12 +18,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
-      setUser(user);
+    // Only run in browser
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+
+    // Dynamically import auth to avoid SSR issues
+    import('@/lib/auth').then(({ onAuthChange }) => {
+      const unsubscribe = onAuthChange((user) => {
+        setUser(user);
+        setLoading(false);
+      });
+      
+      // Store unsubscribe for cleanup
+      (window as any).__authUnsubscribe = unsubscribe;
+    }).catch(() => {
+      // Firebase not available
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      const unsubscribe = (window as any).__authUnsubscribe;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   return (

@@ -5,14 +5,15 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User,
-  GoogleAuthProvider,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider } from './firebase';
+import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from './firebase';
 
 // Sign in with Google
 export async function signInWithGoogle() {
   try {
+    const auth = getFirebaseAuth();
+    const googleProvider = getGoogleProvider();
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
@@ -28,6 +29,7 @@ export async function signInWithGoogle() {
 // Sign in with email/password
 export async function signInWithEmail(email: string, password: string) {
   try {
+    const auth = getFirebaseAuth();
     const result = await signInWithEmailAndPassword(auth, email, password);
     return { user: result.user, error: null };
   } catch (error: any) {
@@ -38,6 +40,7 @@ export async function signInWithEmail(email: string, password: string) {
 // Sign up with email/password
 export async function signUpWithEmail(email: string, password: string) {
   try {
+    const auth = getFirebaseAuth();
     const result = await createUserWithEmailAndPassword(auth, email, password);
     const user = result.user;
     
@@ -53,6 +56,7 @@ export async function signUpWithEmail(email: string, password: string) {
 // Sign out
 export async function signOut() {
   try {
+    const auth = getFirebaseAuth();
     await firebaseSignOut(auth);
     return { error: null };
   } catch (error: any) {
@@ -62,6 +66,7 @@ export async function signOut() {
 
 // Create or update user document
 async function createOrUpdateUser(user: User) {
+  const db = getFirebaseDb();
   const userRef = doc(db, 'users', user.uid);
   const userSnap = await getDoc(userRef);
   
@@ -82,10 +87,23 @@ async function createOrUpdateUser(user: User) {
 
 // Auth state observer
 export function onAuthChange(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+  try {
+    const auth = getFirebaseAuth();
+    return onAuthStateChanged(auth, callback);
+  } catch (error) {
+    // Firebase not initialized, return no-op unsubscribe
+    console.warn('Firebase Auth not initialized:', error);
+    callback(null);
+    return () => {};
+  }
 }
 
 // Get current user
 export function getCurrentUser() {
-  return auth.currentUser;
+  try {
+    const auth = getFirebaseAuth();
+    return auth.currentUser;
+  } catch {
+    return null;
+  }
 }

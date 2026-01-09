@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 
-const inter = Inter({ subsets: ["latin"] });
+const outfit = Outfit({ 
+  subsets: ["latin"],
+  variable: "--font-outfit",
+});
 
 export const metadata: Metadata = {
-  title: "Threads Auto Poster - AI Content Generator",
-  description: "AI-powered content generation and auto-posting for Meta Threads",
+  title: "Utilix - AI-Powered SaaS Tools",
+  description: "Supercharge your workflow with AI-powered automation tools. Content generation, social media automation, and more.",
+  keywords: ["AI", "SaaS", "automation", "Threads", "content generation"],
 };
 
 export default function RootLayout({
@@ -16,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko">
-      <body className={inter.className}>
+    <html lang="ko" className={outfit.variable}>
+      <body className={`${outfit.className} antialiased`}>
         <AuthProvider>
           {children}
         </AuthProvider>

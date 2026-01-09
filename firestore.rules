@@ -2,26 +2,108 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can only read/write their own data
+    
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function: Check if user is a member of the organization
+    function isMember(orgId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+    }
+    
+    // Helper function: Check if user is owner or admin of the organization
+    function isAdmin(orgId) {
+      let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      return isAuthenticated() && 
+        member != null && 
+        (member.data.role == 'owner' || member.data.role == 'admin');
+    }
+    
+    // Helper function: Check if user is owner of the organization
+    function isOwner(orgId) {
+      let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      return isAuthenticated() && 
+        member != null && 
+        member.data.role == 'owner';
+    }
+    
+    // Users collection - users can read/write their own data
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Content posts - authenticated users can read, only owner can write
-    match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    // Organizations collection
+    match /organizations/{orgId} {
+      // Any authenticated user can create an organization
+      allow create: if isAuthenticated();
+      
+      // Only members can read organization data
+      allow read: if isMember(orgId);
+      
+      // Only admins can update organization
+      allow update: if isAdmin(orgId);
+      
+      // Only owner can delete organization
+      allow delete: if isOwner(orgId);
+      
+      // Members subcollection
+      match /members/{memberId} {
+        // Members can read other members
+        allow read: if isMember(orgId);
+        
+        // Only admins can add/remove members
+        allow create, delete: if isAdmin(orgId);
+        
+        // Only owner can change roles
+        allow update: if isOwner(orgId);
+      }
+      
+      // Tools subcollection (threads, etc.)
+      match /tools/{toolId} {
+        allow read: if isMember(orgId);
+        allow write: if isAdmin(orgId);
+        
+        // Config subcollection
+        match /config/{configId} {
+          allow read, write: if isAdmin(orgId);
+        }
+        
+        // Queue subcollection for posts
+        match /queue/{postId} {
+          allow read: if isMember(orgId);
+          allow create: if isMember(orgId);
+          allow update, delete: if isAdmin(orgId) || 
+            (isMember(orgId) && resource.data.createdBy == request.auth.uid);
+        }
+      }
+      
+      // Settings subcollection
+      match /settings/{settingId} {
+        allow read: if isMember(orgId);
+        allow write: if isAdmin(orgId);
+      }
     }
     
-    // Generated content queue
+    // Invitations collection (for inviting members)
+    match /invitations/{inviteId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.email == request.auth.token.email || 
+         isAdmin(resource.data.orgId));
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && 
+        (resource.data.email == request.auth.token.email || 
+         isAdmin(resource.data.orgId));
+    }
+    
+    // Legacy queue collection (for backward compatibility during migration)
     match /queue/{docId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Settings - only owner can access
-    match /settings/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isAuthenticated();
     }
   }
 }

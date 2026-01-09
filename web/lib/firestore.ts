@@ -11,10 +11,11 @@ import {
   orderBy,
   limit,
   serverTimestamp,
-  DocumentData,
   QueryConstraint,
+  setDoc,
+  increment,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { getFirebaseDb } from './firebase';
 
 // Post types
 export interface Post {
@@ -26,27 +27,40 @@ export interface Post {
   createdAt?: any;
   postedAt?: any;
   permalink?: string;
-  userId?: string;
+  createdBy?: string;
 }
 
-// Queue operations
-export const queueCollection = collection(db, 'queue');
+// ============ Multi-tenant Queue Operations ============
 
-// Add to queue
-export async function addToQueue(post: Omit<Post, 'id' | 'createdAt'>) {
-  const docRef = await addDoc(queueCollection, {
+// Get queue collection reference for an organization
+function getQueueCollection(orgId: string) {
+  const db = getFirebaseDb();
+  return collection(db, 'organizations', orgId, 'tools', 'threads', 'queue');
+}
+
+// Add to queue (multi-tenant)
+export async function addToQueue(
+  orgId: string,
+  post: Omit<Post, 'id' | 'createdAt'>,
+  userId: string
+) {
+  const queueRef = getQueueCollection(orgId);
+  const docRef = await addDoc(queueRef, {
     ...post,
+    createdBy: userId,
     createdAt: serverTimestamp(),
   });
   return docRef.id;
 }
 
-// Get posts from queue
+// Get posts from queue (multi-tenant)
 export async function getQueue(
+  orgId: string,
   status?: string,
   language?: string,
   maxResults: number = 50
-) {
+): Promise<Post[]> {
+  const queueRef = getQueueCollection(orgId);
   const constraints: QueryConstraint[] = [];
   
   if (status) {
@@ -59,7 +73,7 @@ export async function getQueue(
   constraints.push(orderBy('createdAt', 'desc'));
   constraints.push(limit(maxResults));
   
-  const q = query(queueCollection, ...constraints);
+  const q = query(queueRef, ...constraints);
   const snapshot = await getDocs(q);
   
   return snapshot.docs.map(doc => ({
@@ -68,14 +82,16 @@ export async function getQueue(
   })) as Post[];
 }
 
-// Update post status
+// Update post status (multi-tenant)
 export async function updatePostStatus(
+  orgId: string,
   postId: string,
   status: 'pending' | 'posted' | 'failed',
   permalink?: string
 ) {
-  const docRef = doc(db, 'queue', postId);
-  const updateData: any = {
+  const db = getFirebaseDb();
+  const docRef = doc(db, 'organizations', orgId, 'tools', 'threads', 'queue', postId);
+  const updateData: Record<string, any> = {
     status,
   };
   
@@ -89,35 +105,167 @@ export async function updatePostStatus(
   await updateDoc(docRef, updateData);
 }
 
-// Delete post
-export async function deletePost(postId: string) {
-  const docRef = doc(db, 'queue', postId);
+// Delete post (multi-tenant)
+export async function deletePost(orgId: string, postId: string) {
+  const db = getFirebaseDb();
+  const docRef = doc(db, 'organizations', orgId, 'tools', 'threads', 'queue', postId);
   await deleteDoc(docRef);
 }
 
-// User settings
-export interface UserSettings {
-  threadsToken?: string;
-  openaiKey?: string;
-  googleKey?: string;
-  defaultModel?: string;
-  defaultLanguage?: string;
+// ============ Tool Configuration ============
+
+export interface ThreadsConfig {
+  accessToken?: string;
+  userId?: string;
+  username?: string;
+  enabled: boolean;
 }
 
-export async function getUserSettings(userId: string): Promise<UserSettings | null> {
-  const docRef = doc(db, 'settings', userId);
-  const docSnap = await getDoc(docRef);
+// Get threads tool config
+export async function getThreadsConfig(orgId: string): Promise<ThreadsConfig | null> {
+  const db = getFirebaseDb();
+  const configRef = doc(db, 'organizations', orgId, 'tools', 'threads', 'config', 'main');
+  const configSnap = await getDoc(configRef);
   
-  if (docSnap.exists()) {
-    return docSnap.data() as UserSettings;
+  if (configSnap.exists()) {
+    return configSnap.data() as ThreadsConfig;
+  }
+  
+  // Return default config if not exists
+  const toolRef = doc(db, 'organizations', orgId, 'tools', 'threads');
+  const toolSnap = await getDoc(toolRef);
+  
+  if (toolSnap.exists()) {
+    return { enabled: toolSnap.data().enabled || false };
+  }
+  
+  return null;
+}
+
+// Save threads tool config
+export async function saveThreadsConfig(
+  orgId: string,
+  config: Partial<ThreadsConfig>
+): Promise<void> {
+  const db = getFirebaseDb();
+  const configRef = doc(db, 'organizations', orgId, 'tools', 'threads', 'config', 'main');
+  await updateDoc(configRef, {
+    ...config,
+    updatedAt: serverTimestamp(),
+  }).catch(async () => {
+    // If document doesn't exist, create it
+    await setDoc(configRef, {
+      ...config,
+      createdAt: serverTimestamp(),
+    });
+  });
+}
+
+// ============ Organization Settings ============
+
+export interface OrgSettings {
+  timezone?: string;
+  language?: string;
+  defaultModel?: string;
+}
+
+// Get organization settings
+export async function getOrgSettings(orgId: string): Promise<OrgSettings | null> {
+  const db = getFirebaseDb();
+  const settingsRef = doc(db, 'organizations', orgId, 'settings', 'general');
+  const settingsSnap = await getDoc(settingsRef);
+  
+  if (settingsSnap.exists()) {
+    return settingsSnap.data() as OrgSettings;
   }
   return null;
 }
 
-export async function saveUserSettings(userId: string, settings: Partial<UserSettings>) {
-  const docRef = doc(db, 'settings', userId);
-  await updateDoc(docRef, {
+// Save organization settings
+export async function saveOrgSettings(
+  orgId: string,
+  settings: Partial<OrgSettings>
+): Promise<void> {
+  const db = getFirebaseDb();
+  const settingsRef = doc(db, 'organizations', orgId, 'settings', 'general');
+  await updateDoc(settingsRef, {
     ...settings,
     updatedAt: serverTimestamp(),
+  }).catch(async () => {
+    await setDoc(settingsRef, {
+      ...settings,
+      createdAt: serverTimestamp(),
+    });
   });
+}
+
+// ============ Usage Tracking ============
+
+export interface UsageStats {
+  postsThisMonth: number;
+  lastResetDate: any;
+}
+
+// Get usage stats for organization
+export async function getUsageStats(orgId: string): Promise<UsageStats> {
+  const db = getFirebaseDb();
+  const statsRef = doc(db, 'organizations', orgId, 'settings', 'usage');
+  const statsSnap = await getDoc(statsRef);
+  
+  if (statsSnap.exists()) {
+    return statsSnap.data() as UsageStats;
+  }
+  
+  return {
+    postsThisMonth: 0,
+    lastResetDate: serverTimestamp(),
+  };
+}
+
+// Increment post count
+export async function incrementPostCount(orgId: string): Promise<void> {
+  const db = getFirebaseDb();
+  const statsRef = doc(db, 'organizations', orgId, 'settings', 'usage');
+  
+  try {
+    await updateDoc(statsRef, {
+      postsThisMonth: increment(1),
+    });
+  } catch {
+    await setDoc(statsRef, {
+      postsThisMonth: 1,
+      lastResetDate: serverTimestamp(),
+    });
+  }
+}
+
+// ============ Legacy Support (for migration) ============
+
+// Get posts from legacy queue
+export async function getLegacyQueue(
+  status?: string,
+  language?: string,
+  maxResults: number = 50
+): Promise<Post[]> {
+  const db = getFirebaseDb();
+  const legacyQueueCollection = collection(db, 'queue');
+  const constraints: QueryConstraint[] = [];
+  
+  if (status) {
+    constraints.push(where('status', '==', status));
+  }
+  if (language) {
+    constraints.push(where('language', '==', language));
+  }
+  
+  constraints.push(orderBy('createdAt', 'desc'));
+  constraints.push(limit(maxResults));
+  
+  const q = query(legacyQueueCollection, ...constraints);
+  const snapshot = await getDocs(q);
+  
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as Post[];
 }

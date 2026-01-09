@@ -5,13 +5,14 @@ import {
   deleteObject,
   listAll,
 } from 'firebase/storage';
-import { storage } from './firebase';
+import { getFirebaseStorage } from './firebase';
 
 // Upload file
 export async function uploadFile(
   file: File,
   path: string
 ): Promise<string> {
+  const storage = getFirebaseStorage();
   const storageRef = ref(storage, path);
   const snapshot = await uploadBytes(storageRef, file);
   const downloadURL = await getDownloadURL(snapshot.ref);
@@ -31,18 +32,21 @@ export async function uploadUserFile(
 
 // Get file URL
 export async function getFileURL(path: string): Promise<string> {
+  const storage = getFirebaseStorage();
   const storageRef = ref(storage, path);
   return getDownloadURL(storageRef);
 }
 
 // Delete file
 export async function deleteFile(path: string): Promise<void> {
+  const storage = getFirebaseStorage();
   const storageRef = ref(storage, path);
   await deleteObject(storageRef);
 }
 
 // List user files
 export async function listUserFiles(userId: string) {
+  const storage = getFirebaseStorage();
   const listRef = ref(storage, `users/${userId}`);
   const result = await listAll(listRef);
   
