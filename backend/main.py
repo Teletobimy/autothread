@@ -59,6 +59,7 @@ class TranslateRequest(BaseModel):
     source_doc_ids: Optional[List[str]] = None
 
 class PostRequest(BaseModel):
+    org_id: str  # Required: Organization ID to get Threads config from Firestore
     sheet_name: str = "쓰레드"
     interval_minutes: int = 60
 
@@ -183,12 +184,21 @@ async def translate_content(request: TranslateRequest, db: firestore.Client = De
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/post")
-async def post_to_threads(request: PostRequest, background_tasks: BackgroundTasks):
+async def post_to_threads(request: PostRequest, background_tasks: BackgroundTasks, db: firestore.Client = Depends(get_firestore)):
     """Start auto-posting to Threads"""
     try:
-        token = os.getenv("LONG_LIVED_ACCESS_TOKEN")
+        # Get Threads config from Firestore for this organization
+        config_ref = db.collection("orgs").document(request.org_id).collection("tools").document("threads").collection("config").document("main")
+        config_doc = config_ref.get()
+        
+        if not config_doc.exists:
+            raise HTTPException(status_code=400, detail="Threads API 설정이 없습니다. Settings에서 Access Token을 먼저 설정해주세요.")
+        
+        config = config_doc.to_dict()
+        token = config.get("accessToken")
+        
         if not token:
-            raise HTTPException(status_code=400, detail="Threads token not configured")
+            raise HTTPException(status_code=400, detail="Access Token이 설정되지 않았습니다. Settings에서 설정해주세요.")
         
         threads_api = ThreadsAPI(token)
         user = threads_api.me()
@@ -197,7 +207,7 @@ async def post_to_threads(request: PostRequest, background_tasks: BackgroundTask
         background_tasks.add_task(
             auto_post_worker,
             threads_api,
-            request.sheet_name,
+            request.org_id,
             request.interval_minutes
         )
         
@@ -206,17 +216,20 @@ async def post_to_threads(request: PostRequest, background_tasks: BackgroundTask
             "message": f"자동 게시가 시작되었습니다. (@{user.get('username', 'N/A')})",
             "user": user
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def auto_post_worker(threads_api: ThreadsAPI, sheet_name: str, interval_minutes: int):
+async def auto_post_worker(threads_api: ThreadsAPI, org_id: str, interval_minutes: int):
     """Background worker for auto-posting"""
     db = firestore.client()
     
     while True:
         try:
-            # Get next pending post from Firestore
-            docs = db.collection("queue").where("status", "==", "pending").limit(1).stream()
+            # Get next pending post from organization's queue
+            queue_ref = db.collection("orgs").document(org_id).collection("tools").document("threads").collection("queue")
+            docs = queue_ref.where("status", "==", "pending").limit(1).stream()
             doc = next(docs, None)
             
             if not doc:
