@@ -1,38 +1,73 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createOrganization } from '@/lib/organizations';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isDemo, loading: authLoading } = useAuth();
   const [step, setStep] = useState(1);
   const [orgName, setOrgName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Demo mode: skip onboarding entirely
+  useEffect(() => {
+    if (!authLoading && isDemo) {
+      console.log('Demo mode detected, redirecting to dashboard');
+      router.push('/dashboard/threads');
+    }
+  }, [authLoading, isDemo, router]);
+
   const handleCreateOrg = async () => {
-    if (!user || !orgName.trim()) return;
+    console.log('handleCreateOrg called', { user, orgName, isDemo });
+    
+    if (!user) {
+      console.log('No user found!');
+      setError('로그인이 필요합니다. 다시 로그인해주세요.');
+      return;
+    }
+    
+    if (!orgName.trim()) {
+      console.log('Organization name is empty');
+      return;
+    }
 
     setLoading(true);
     setError('');
 
     try {
+      console.log('Creating organization...', { uid: user.uid, email: user.email, orgName: orgName.trim() });
       await createOrganization(
         user.uid,
         user.email || '',
         orgName.trim(),
         user.displayName || undefined
       );
+      console.log('Organization created successfully');
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to create organization');
+      console.error('Failed to create organization:', err);
+      setError(err.message || 'Failed to create organization. Please check console for details.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Show loading while checking demo mode
+  if (authLoading || isDemo) {
+    return (
+      <div className="w-full max-w-lg">
+        <div className="glass rounded-2xl border border-white/10 p-8">
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-[var(--gradient-start)] border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-lg">
@@ -101,6 +136,12 @@ export default function OnboardingPage() {
               </p>
             </div>
 
+            {/* Debug info */}
+            <div className="mb-4 p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-400">
+              <p>User: {user ? user.email : 'Not logged in'}</p>
+              <p>Demo: {isDemo ? 'Yes' : 'No'}</p>
+            </div>
+
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
@@ -136,6 +177,19 @@ export default function OnboardingPage() {
                 className="flex-1 btn-primary py-3 rounded-xl text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+            
+            {/* Skip option for testing */}
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => {
+                  localStorage.setItem('demoMode', 'true');
+                  window.location.href = '/dashboard/threads';
+                }}
+                className="text-gray-500 hover:text-gray-300 text-sm underline"
+              >
+                데모로 먼저 둘러보기
               </button>
             </div>
           </>

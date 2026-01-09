@@ -51,6 +51,7 @@ class GenerateRequest(BaseModel):
     prompt: str
     count: int = 1
     save_to_firestore: bool = True
+    org_id: Optional[str] = None  # Organization ID for multi-tenant storage
 
 class TranslateRequest(BaseModel):
     model: str = "gemini-2.5-flash"
@@ -105,13 +106,22 @@ async def generate_content(request: GenerateRequest, db: firestore.Client = Depe
             
             # Save to Firestore
             if request.save_to_firestore:
-                doc_ref = db.collection("queue").add({
+                post_data = {
                     "text": text,
                     "status": "pending",
                     "createdAt": firestore.SERVER_TIMESTAMP,
                     "model": request.model,
                     "language": "ko"
-                })
+                }
+                
+                # Use multi-tenant path if org_id is provided
+                if request.org_id and request.org_id != 'demo-org-id':
+                    queue_ref = db.collection("orgs").document(request.org_id).collection("tools").document("threads").collection("queue")
+                    doc_ref = queue_ref.add(post_data)
+                else:
+                    # Fallback to legacy queue for demo mode or missing org_id
+                    doc_ref = db.collection("queue").add(post_data)
+                    
                 results.append({"id": doc_ref[1].id, "text": text[:100] + "..."})
             else:
                 results.append({"text": text})

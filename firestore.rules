@@ -78,11 +78,15 @@ service cloud.firestore {
       // ---------- Tools ----------
       match /tools/{toolId} {
         allow read: if isMember(orgId);
-        allow write: if isAdmin(orgId);
+        // Allow write if admin OR if the user is the org owner (for initial setup)
+        allow write: if isAdmin(orgId) || 
+          (isAuthenticated() && get(/databases/$(database)/documents/orgs/$(orgId)).data.ownerId == request.auth.uid);
         
         // Config subcollection
         match /config/{configId} {
-          allow read, write: if isAdmin(orgId);
+          allow read: if isMember(orgId);
+          allow write: if isAdmin(orgId) || 
+            (isAuthenticated() && get(/databases/$(database)/documents/orgs/$(orgId)).data.ownerId == request.auth.uid);
         }
         
         // Queue subcollection for posts

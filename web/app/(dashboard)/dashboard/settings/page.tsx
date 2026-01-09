@@ -298,8 +298,8 @@ function ThreadsSettings({ orgId, memberRole, t }: { orgId: string; memberRole: 
   };
 
   const handleTest = async () => {
-    if (!accessToken || !userId) {
-      setMessage({ type: 'error', text: 'Please enter Access Token and User ID first' });
+    if (!accessToken) {
+      setMessage({ type: 'error', text: 'Please enter Access Token first' });
       return;
     }
 
@@ -307,30 +307,41 @@ function ThreadsSettings({ orgId, memberRole, t }: { orgId: string; memberRole: 
     setMessage(null);
 
     try {
-      // Test the connection by fetching user profile
-      const response = await fetch(
-        `https://graph.threads.net/v1.0/${userId}?fields=id,username,name&access_token=${accessToken}`
+      // Always use 'me' endpoint to get the correct numeric user ID
+      console.log('Fetching user ID from me endpoint...');
+      const meResponse = await fetch(
+        `https://graph.threads.net/v1.0/me?fields=id,username,name&access_token=${accessToken}`
       );
       
-      if (!response.ok) {
-        throw new Error('Invalid credentials');
+      if (!meResponse.ok) {
+        const errorData = await meResponse.json().catch(() => ({}));
+        console.error('Me endpoint error:', errorData);
+        throw new Error('Invalid access token. Please check your token and try again.');
       }
+      
+      const meData = await meResponse.json();
+      const finalUserId = meData.id;
+      console.log('Got user ID:', finalUserId, 'Username:', meData.username);
+      
+      setUserId(finalUserId); // Update the userId state with numeric ID
 
-      const data = await response.json();
       setMessage({ 
         type: 'success', 
-        text: `Connected successfully! Username: @${data.username || data.name}` 
+        text: `연결 성공! Username: @${meData.username || meData.name}` 
       });
 
-      // Save username to config
+      // Save to config
       await saveThreadsConfig(orgId, {
         accessToken,
-        userId,
-        username: data.username || data.name,
+        userId: finalUserId,
+        username: meData.username || meData.name,
         enabled: true,
       });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Connection failed. Please check your credentials.' });
+      
+      console.log('Config saved successfully');
+    } catch (error: any) {
+      console.error('Connection test failed:', error);
+      setMessage({ type: 'error', text: error.message || 'Connection failed. Please check your credentials.' });
     } finally {
       setTesting(false);
     }
@@ -390,8 +401,7 @@ function ThreadsSettings({ orgId, memberRole, t }: { orgId: string; memberRole: 
               <li>Go to <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Meta for Developers</a></li>
               <li>Create or select your app</li>
               <li>Add Threads API product</li>
-              <li>Generate a Long-Lived Access Token</li>
-              <li>Copy your User ID from the API Explorer</li>
+              <li>Generate a Long-Lived Access Token and paste below</li>
             </ol>
           </div>
 
@@ -409,32 +419,19 @@ function ThreadsSettings({ orgId, memberRole, t }: { orgId: string; memberRole: 
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              User ID
-            </label>
-            <input
-              type="text"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              disabled={!isAdmin}
-              placeholder="Enter your Threads User ID (e.g., 1234567890)"
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--gradient-start)] disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
-            />
-          </div>
 
           {isAdmin && (
             <div className="flex gap-3">
               <button
                 onClick={handleTest}
-                disabled={testing || !accessToken || !userId}
+                disabled={testing || !accessToken}
                 className="flex-1 btn-secondary py-3 rounded-xl text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {testing ? 'Testing...' : 'Test Connection'}
               </button>
               <button
                 onClick={handleSave}
-                disabled={saving || !accessToken || !userId}
+                disabled={saving || !accessToken}
                 className="flex-1 btn-primary py-3 rounded-xl text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Saving...' : 'Save Settings'}

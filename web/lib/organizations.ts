@@ -104,9 +104,9 @@ export async function createOrganization(
   displayName?: string
 ): Promise<Organization> {
   const db = getFirebaseDb();
-  const batch = writeBatch(db);
   
-  // Create organization document
+  console.log('Step 1: Creating organization document...');
+  // Step 1: Create organization document first
   const orgRef = doc(collection(db, ORGS_COLLECTION));
   const orgData: Omit<Organization, 'id'> = {
     name,
@@ -115,35 +115,62 @@ export async function createOrganization(
     ownerId: userId,
     createdAt: serverTimestamp(),
   };
-  batch.set(orgRef, orgData);
   
-  // Add creator as owner member
+  try {
+    await setDoc(orgRef, orgData);
+    console.log('Step 1 complete: Org created with ID:', orgRef.id);
+  } catch (err) {
+    console.error('Step 1 failed:', err);
+    throw new Error('Failed to create organization document');
+  }
+  
+  console.log('Step 2: Adding creator as owner member...');
+  // Step 2: Add creator as owner member (now org exists, so rules can check ownerId)
   const memberRef = doc(db, ORGS_COLLECTION, orgRef.id, 'members', userId);
-  batch.set(memberRef, {
-    userId,
-    email: userEmail,
-    displayName: displayName || userEmail.split('@')[0],
-    role: 'owner',
-    joinedAt: serverTimestamp(),
-  });
+  try {
+    await setDoc(memberRef, {
+      userId,
+      email: userEmail,
+      displayName: displayName || userEmail.split('@')[0],
+      role: 'owner',
+      joinedAt: serverTimestamp(),
+    });
+    console.log('Step 2 complete: Member added');
+  } catch (err) {
+    console.error('Step 2 failed:', err);
+    throw new Error('Failed to add member document');
+  }
   
-  // Update user's orgIds list
+  console.log('Step 3: Updating user orgIds...');
+  // Step 3: Update user's orgIds list
   const userRef = doc(db, 'users', userId);
-  batch.set(userRef, {
-    orgIds: arrayUnion(orgRef.id),
-    currentOrgId: orgRef.id,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  try {
+    await setDoc(userRef, {
+      orgIds: arrayUnion(orgRef.id),
+      currentOrgId: orgRef.id,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    console.log('Step 3 complete: User updated');
+  } catch (err) {
+    console.error('Step 3 failed:', err);
+    throw new Error('Failed to update user document');
+  }
   
-  // Create default tools document
+  console.log('Step 4: Creating tools document...');
+  // Step 4: Create default tools document (now member exists, so admin check passes)
   const threadsToolRef = doc(db, ORGS_COLLECTION, orgRef.id, 'tools', 'threads');
-  batch.set(threadsToolRef, {
-    enabled: true,
-    createdAt: serverTimestamp(),
-  });
+  try {
+    await setDoc(threadsToolRef, {
+      enabled: true,
+      createdAt: serverTimestamp(),
+    });
+    console.log('Step 4 complete: Tools created');
+  } catch (err) {
+    console.error('Step 4 failed:', err);
+    throw new Error('Failed to create tools document');
+  }
   
-  await batch.commit();
-  
+  console.log('Organization creation complete!');
   return {
     id: orgRef.id,
     ...orgData,

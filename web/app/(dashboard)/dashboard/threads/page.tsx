@@ -255,6 +255,7 @@ function TranslateContent({ orgId, t }: { orgId: string; t: any }) {
 
 // Queue Content Tab
 function QueueContent({ orgId, t }: { orgId: string; t: any }) {
+  const { isDemo } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'posted'>('all');
@@ -262,9 +263,16 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
 
   useEffect(() => {
     loadPosts();
-  }, [orgId, filter]);
+  }, [orgId, filter, isDemo]);
 
   const loadPosts = async () => {
+    // Skip loading in demo mode - show empty state
+    if (isDemo) {
+      setPosts([]);
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     try {
       const status = filter === 'all' ? undefined : filter;
@@ -330,9 +338,18 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
         <div className="text-center py-8 text-gray-400">{t.common.loading}</div>
       ) : posts.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <div className="text-4xl mb-4">📭</div>
-          <p>No posts in queue</p>
-          <p className="text-sm mt-1">Generate content to get started</p>
+          <div className="text-4xl mb-4">{isDemo ? '🎮' : '📭'}</div>
+          {isDemo ? (
+            <>
+              <p>데모 모드에서는 대기열이 저장되지 않습니다</p>
+              <p className="text-sm mt-1">로그인 후 콘텐츠를 저장하세요</p>
+            </>
+          ) : (
+            <>
+              <p>No posts in queue</p>
+              <p className="text-sm mt-1">Generate content to get started</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

@@ -33,18 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
 
-  // Check for demo mode on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const demoMode = localStorage.getItem('demoMode') === 'true';
-      if (demoMode) {
-        setIsDemo(true);
-        setUser(DEMO_USER);
-        setLoading(false);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     // Only run in browser
     if (typeof window === 'undefined') {
@@ -52,22 +40,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Skip Firebase auth if in demo mode
-    if (isDemo) {
-      return;
-    }
-
-    // Dynamically import auth to avoid SSR issues
+    // Always check Firebase auth first - real login takes priority over demo mode
     import('@/lib/auth').then(({ onAuthChange }) => {
-      const unsubscribe = onAuthChange((user) => {
-        setUser(user);
+      const unsubscribe = onAuthChange((firebaseUser) => {
+        if (firebaseUser) {
+          // Real user logged in - disable demo mode
+          localStorage.removeItem('demoMode');
+          setIsDemo(false);
+          setUser(firebaseUser);
+        } else {
+          // No real user - check if we should use demo mode
+          const demoMode = localStorage.getItem('demoMode') === 'true';
+          if (demoMode) {
+            setIsDemo(true);
+            setUser(DEMO_USER);
+          } else {
+            setIsDemo(false);
+            setUser(null);
+          }
+        }
         setLoading(false);
       });
       
       // Store unsubscribe for cleanup
       (window as any).__authUnsubscribe = unsubscribe;
     }).catch(() => {
-      // Firebase not available
+      // Firebase not available - check demo mode
+      const demoMode = localStorage.getItem('demoMode') === 'true';
+      if (demoMode) {
+        setIsDemo(true);
+        setUser(DEMO_USER);
+      }
       setLoading(false);
     });
 
@@ -77,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         unsubscribe();
       }
     };
-  }, [isDemo]);
+  }, []);
 
   const enableDemoMode = () => {
     if (typeof window !== 'undefined') {

@@ -57,12 +57,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     }
   }, [authLoading, user, isDemo, enableDemoMode]);
 
-  // Show demo banner and skip auth redirects in demo mode
   // Redirect to onboarding only for real users without organizations
-  if (!isDemo && !orgLoading && user && organizations.length === 0) {
-    router.push('/onboarding');
-    return null;
-  }
+  const needsOnboarding = !isDemo && !orgLoading && user && organizations.length === 0;
+  
+  useEffect(() => {
+    if (needsOnboarding) {
+      router.push('/onboarding');
+    }
+  }, [needsOnboarding, router]);
 
   const handleSignOut = async () => {
     if (isDemo) {
@@ -74,7 +76,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     router.push('/');
   };
 
-  if (authLoading || orgLoading) {
+  // Show loading while checking auth or redirecting
+  if (authLoading || orgLoading || needsOnboarding) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-[var(--gradient-start)] border-t-transparent rounded-full animate-spin"></div>
