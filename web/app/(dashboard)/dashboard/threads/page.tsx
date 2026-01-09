@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from '@/contexts/LanguageContext';
-import { getQueue, deletePost, Post } from '@/lib/firestore';
+import { getQueue, deletePost, updatePostText, Post } from '@/lib/firestore';
 import { api } from '@/lib/config';
 
 type TabType = 'generate' | 'translate' | 'queue' | 'post';
@@ -260,6 +260,9 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'posted'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadPosts();
@@ -299,6 +302,35 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
       alert('Failed to delete post');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleStartEdit = (post: Post) => {
+    setEditingId(post.id || null);
+    setEditText(post.text);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editText.trim()) return;
+
+    setSaving(true);
+    try {
+      await updatePostText(orgId, editingId, editText.trim());
+      setPosts(posts.map(p => 
+        p.id === editingId ? { ...p, text: editText.trim() } : p
+      ));
+      setEditingId(null);
+      setEditText('');
+    } catch (error) {
+      console.error('Failed to update post:', error);
+      alert('Failed to update post');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -359,7 +391,34 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
               className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/[0.07] transition-colors group"
             >
               <div className="flex items-start justify-between gap-4">
-                <p className="text-white text-sm flex-1 whitespace-pre-wrap">{post.text}</p>
+                {editingId === post.id ? (
+                  <div className="flex-1 space-y-3">
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:border-[var(--gradient-start)] resize-none min-h-[100px]"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveEdit}
+                        disabled={saving || !editText.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 text-sm hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                      >
+                        {saving ? '저장 중...' : '저장'}
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={saving}
+                        className="px-3 py-1.5 rounded-lg bg-white/10 text-gray-400 text-sm hover:bg-white/20 transition-colors"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-white text-sm flex-1 whitespace-pre-wrap">{post.text}</p>
+                )}
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
                     post.status === 'posted' ? 'bg-green-500/20 text-green-400' :
@@ -370,23 +429,34 @@ function QueueContent({ orgId, t }: { orgId: string; t: any }) {
                      post.status === 'pending' ? t.dashboard.threads.pending : 
                      t.dashboard.threads.failed}
                   </span>
-                  {post.status === 'pending' && (
-                    <button
-                      onClick={() => post.id && handleDelete(post.id)}
-                      disabled={deletingId === post.id}
-                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                      title={t.common.delete}
-                    >
-                      {deletingId === post.id ? (
-                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      ) : (
+                  {post.status === 'pending' && editingId !== post.id && (
+                    <>
+                      <button
+                        onClick={() => handleStartEdit(post)}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title={t.common.edit}
+                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
-                      )}
-                    </button>
+                      </button>
+                      <button
+                        onClick={() => post.id && handleDelete(post.id)}
+                        disabled={deletingId === post.id}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title={t.common.delete}
+                      >
+                        {deletingId === post.id ? (
+                          <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

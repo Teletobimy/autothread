@@ -115,6 +115,16 @@ export async function deletePost(orgId: string, postId: string) {
   await deleteDoc(docRef);
 }
 
+// Update post text (multi-tenant)
+export async function updatePostText(orgId: string, postId: string, newText: string) {
+  const db = getFirebaseDb();
+  const docRef = doc(db, ORGS_COLLECTION, orgId, 'tools', 'threads', 'queue', postId);
+  await updateDoc(docRef, {
+    text: newText,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ============ Tool Configuration ============
 
 export interface ThreadsConfig {
