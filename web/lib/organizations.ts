@@ -46,7 +46,7 @@ export interface UserProfile {
   email: string;
   displayName?: string;
   photoURL?: string;
-  organizations: string[];
+  orgIds: string[];       // 변경: organizations → orgIds
   currentOrgId?: string;
   createdAt: any;
 }
@@ -82,6 +82,9 @@ export const PLAN_LIMITS = {
   },
 };
 
+// Collection name constant
+const ORGS_COLLECTION = 'orgs';
+
 // Generate slug from name
 function generateSlug(name: string): string {
   return name
@@ -104,7 +107,7 @@ export async function createOrganization(
   const batch = writeBatch(db);
   
   // Create organization document
-  const orgRef = doc(collection(db, 'organizations'));
+  const orgRef = doc(collection(db, ORGS_COLLECTION));
   const orgData: Omit<Organization, 'id'> = {
     name,
     slug: generateSlug(name),
@@ -115,7 +118,7 @@ export async function createOrganization(
   batch.set(orgRef, orgData);
   
   // Add creator as owner member
-  const memberRef = doc(db, 'organizations', orgRef.id, 'members', userId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgRef.id, 'members', userId);
   batch.set(memberRef, {
     userId,
     email: userEmail,
@@ -124,16 +127,16 @@ export async function createOrganization(
     joinedAt: serverTimestamp(),
   });
   
-  // Update user's organizations list
+  // Update user's orgIds list
   const userRef = doc(db, 'users', userId);
   batch.set(userRef, {
-    organizations: arrayUnion(orgRef.id),
+    orgIds: arrayUnion(orgRef.id),
     currentOrgId: orgRef.id,
     updatedAt: serverTimestamp(),
   }, { merge: true });
   
   // Create default tools document
-  const threadsToolRef = doc(db, 'organizations', orgRef.id, 'tools', 'threads');
+  const threadsToolRef = doc(db, ORGS_COLLECTION, orgRef.id, 'tools', 'threads');
   batch.set(threadsToolRef, {
     enabled: true,
     createdAt: serverTimestamp(),
@@ -150,7 +153,7 @@ export async function createOrganization(
 // Get organization by ID
 export async function getOrganization(orgId: string): Promise<Organization | null> {
   const db = getFirebaseDb();
-  const docRef = doc(db, 'organizations', orgId);
+  const docRef = doc(db, ORGS_COLLECTION, orgId);
   const docSnap = await getDoc(docRef);
   
   if (docSnap.exists()) {
@@ -170,7 +173,7 @@ export async function getUserOrganizations(userId: string): Promise<Organization
   }
   
   const userData = userSnap.data();
-  const orgIds = userData.organizations || [];
+  const orgIds = userData.orgIds || userData.organizations || []; // 하위 호환성
   
   const organizations: Organization[] = [];
   for (const orgId of orgIds) {
@@ -189,7 +192,7 @@ export async function updateOrganization(
   data: Partial<Pick<Organization, 'name' | 'description' | 'logoUrl'>>
 ): Promise<void> {
   const db = getFirebaseDb();
-  const docRef = doc(db, 'organizations', orgId);
+  const docRef = doc(db, ORGS_COLLECTION, orgId);
   await updateDoc(docRef, {
     ...data,
     updatedAt: serverTimestamp(),
@@ -201,7 +204,7 @@ export async function deleteOrganization(orgId: string): Promise<void> {
   const db = getFirebaseDb();
   // Note: In production, you'd want to delete subcollections too
   // or use a Cloud Function for cascading deletes
-  const docRef = doc(db, 'organizations', orgId);
+  const docRef = doc(db, ORGS_COLLECTION, orgId);
   await deleteDoc(docRef);
 }
 
@@ -210,7 +213,7 @@ export async function deleteOrganization(orgId: string): Promise<void> {
 // Get organization members
 export async function getOrganizationMembers(orgId: string): Promise<OrganizationMember[]> {
   const db = getFirebaseDb();
-  const membersRef = collection(db, 'organizations', orgId, 'members');
+  const membersRef = collection(db, ORGS_COLLECTION, orgId, 'members');
   const snapshot = await getDocs(membersRef);
   
   return snapshot.docs.map(doc => ({
@@ -222,7 +225,7 @@ export async function getOrganizationMembers(orgId: string): Promise<Organizatio
 // Check if user is member of organization
 export async function isMemberOf(userId: string, orgId: string): Promise<boolean> {
   const db = getFirebaseDb();
-  const memberRef = doc(db, 'organizations', orgId, 'members', userId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgId, 'members', userId);
   const memberSnap = await getDoc(memberRef);
   return memberSnap.exists();
 }
@@ -230,7 +233,7 @@ export async function isMemberOf(userId: string, orgId: string): Promise<boolean
 // Get member role
 export async function getMemberRole(userId: string, orgId: string): Promise<MemberRole | null> {
   const db = getFirebaseDb();
-  const memberRef = doc(db, 'organizations', orgId, 'members', userId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgId, 'members', userId);
   const memberSnap = await getDoc(memberRef);
   
   if (memberSnap.exists()) {
@@ -246,7 +249,7 @@ export async function updateMemberRole(
   newRole: MemberRole
 ): Promise<void> {
   const db = getFirebaseDb();
-  const memberRef = doc(db, 'organizations', orgId, 'members', memberId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgId, 'members', memberId);
   await updateDoc(memberRef, { role: newRole });
 }
 
@@ -256,21 +259,21 @@ export async function removeMember(orgId: string, memberId: string): Promise<voi
   const batch = writeBatch(db);
   
   // Remove from members subcollection
-  const memberRef = doc(db, 'organizations', orgId, 'members', memberId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgId, 'members', memberId);
   batch.delete(memberRef);
   
-  // Remove org from user's organizations list
+  // Remove org from user's orgIds list
   const userRef = doc(db, 'users', memberId);
   batch.update(userRef, {
-    organizations: arrayRemove(orgId),
+    orgIds: arrayRemove(orgId),
   });
   
   await batch.commit();
 }
 
-// ============ Invitation Operations ============
+// ============ Invitation Operations (조직 내부) ============
 
-// Create invitation
+// Create invitation (now inside org)
 export async function createInvitation(
   orgId: string,
   orgName: string,
@@ -279,7 +282,8 @@ export async function createInvitation(
   invitedBy: string
 ): Promise<string> {
   const db = getFirebaseDb();
-  const inviteRef = await addDoc(collection(db, 'invitations'), {
+  // 초대장을 조직 내부에 저장
+  const inviteRef = await addDoc(collection(db, ORGS_COLLECTION, orgId, 'invitations'), {
     orgId,
     orgName,
     email: email.toLowerCase(),
@@ -293,12 +297,11 @@ export async function createInvitation(
   return inviteRef.id;
 }
 
-// Get pending invitations for email
-export async function getPendingInvitations(email: string): Promise<Invitation[]> {
+// Get pending invitations for an organization
+export async function getOrgInvitations(orgId: string): Promise<Invitation[]> {
   const db = getFirebaseDb();
   const q = query(
-    collection(db, 'invitations'),
-    where('email', '==', email.toLowerCase()),
+    collection(db, ORGS_COLLECTION, orgId, 'invitations'),
     where('status', '==', 'pending')
   );
   
@@ -311,13 +314,14 @@ export async function getPendingInvitations(email: string): Promise<Invitation[]
 
 // Accept invitation
 export async function acceptInvitation(
+  orgId: string,
   inviteId: string,
   userId: string,
   userEmail: string,
   displayName?: string
 ): Promise<void> {
   const db = getFirebaseDb();
-  const inviteRef = doc(db, 'invitations', inviteId);
+  const inviteRef = doc(db, ORGS_COLLECTION, orgId, 'invitations', inviteId);
   const inviteSnap = await getDoc(inviteRef);
   
   if (!inviteSnap.exists()) {
@@ -333,7 +337,7 @@ export async function acceptInvitation(
   const batch = writeBatch(db);
   
   // Add user as member
-  const memberRef = doc(db, 'organizations', invite.orgId, 'members', userId);
+  const memberRef = doc(db, ORGS_COLLECTION, orgId, 'members', userId);
   batch.set(memberRef, {
     userId,
     email: userEmail,
@@ -342,10 +346,10 @@ export async function acceptInvitation(
     joinedAt: serverTimestamp(),
   });
   
-  // Update user's organizations
+  // Update user's orgIds
   const userRef = doc(db, 'users', userId);
   batch.set(userRef, {
-    organizations: arrayUnion(invite.orgId),
+    orgIds: arrayUnion(orgId),
     updatedAt: serverTimestamp(),
   }, { merge: true });
   
@@ -353,6 +357,13 @@ export async function acceptInvitation(
   batch.update(inviteRef, { status: 'accepted' });
   
   await batch.commit();
+}
+
+// Delete invitation
+export async function deleteInvitation(orgId: string, inviteId: string): Promise<void> {
+  const db = getFirebaseDb();
+  const inviteRef = doc(db, ORGS_COLLECTION, orgId, 'invitations', inviteId);
+  await deleteDoc(inviteRef);
 }
 
 // ============ User Profile Operations ============
@@ -369,7 +380,12 @@ export async function getOrCreateUserProfile(
   const userSnap = await getDoc(userRef);
   
   if (userSnap.exists()) {
-    return { id: userSnap.id, ...userSnap.data() } as UserProfile;
+    const data = userSnap.data();
+    return { 
+      id: userSnap.id, 
+      ...data,
+      orgIds: data.orgIds || data.organizations || [], // 하위 호환성
+    } as UserProfile;
   }
   
   // Create new user profile
@@ -377,7 +393,7 @@ export async function getOrCreateUserProfile(
     email,
     displayName: displayName || email.split('@')[0],
     photoURL,
-    organizations: [],
+    orgIds: [],
     createdAt: serverTimestamp(),
   };
   
@@ -403,7 +419,12 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   const userSnap = await getDoc(userRef);
   
   if (userSnap.exists()) {
-    return { id: userSnap.id, ...userSnap.data() } as UserProfile;
+    const data = userSnap.data();
+    return { 
+      id: userSnap.id, 
+      ...data,
+      orgIds: data.orgIds || data.organizations || [], // 하위 호환성
+    } as UserProfile;
   }
   return null;
 }

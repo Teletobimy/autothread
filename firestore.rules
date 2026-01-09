@@ -11,12 +11,12 @@ service cloud.firestore {
     // Helper function: Check if user is a member of the organization
     function isMember(orgId) {
       return isAuthenticated() && 
-        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+        exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid));
     }
     
     // Helper function: Check if user is owner or admin of the organization
     function isAdmin(orgId) {
-      let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid));
       return isAuthenticated() && 
         member != null && 
         (member.data.role == 'owner' || member.data.role == 'admin');
@@ -24,13 +24,15 @@ service cloud.firestore {
     
     // Helper function: Check if user is owner of the organization
     function isOwner(orgId) {
-      let member = get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid));
       return isAuthenticated() && 
         member != null && 
         member.data.role == 'owner';
     }
     
-    // Users collection - users can read/write their own data
+    // ============================================
+    // Users collection (글로벌 - Auth 연동용)
+    // ============================================
     match /users/{userId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow create: if isAuthenticated() && request.auth.uid == userId;
@@ -38,8 +40,10 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Organizations collection
-    match /organizations/{orgId} {
+    // ============================================
+    // Orgs collection (단일 최상위 테넌트)
+    // ============================================
+    match /orgs/{orgId} {
       // Any authenticated user can create an organization
       allow create: if isAuthenticated();
       
@@ -52,19 +56,26 @@ service cloud.firestore {
       // Only owner can delete organization
       allow delete: if isOwner(orgId);
       
-      // Members subcollection
+      // ---------- Members ----------
       match /members/{memberId} {
-        // Members can read other members
         allow read: if isMember(orgId);
-        
-        // Only admins can add/remove members
-        allow create, delete: if isAdmin(orgId);
-        
-        // Only owner can change roles
+        allow create: if isAdmin(orgId) || 
+          (isAuthenticated() && request.auth.uid == memberId);
+        allow delete: if isAdmin(orgId);
         allow update: if isOwner(orgId);
       }
       
-      // Tools subcollection (threads, etc.)
+      // ---------- Invitations (조직 내부) ----------
+      match /invitations/{inviteId} {
+        allow read: if isMember(orgId) || 
+          (isAuthenticated() && resource.data.email == request.auth.token.email);
+        allow create: if isAdmin(orgId);
+        allow update: if isAdmin(orgId) || 
+          (isAuthenticated() && resource.data.email == request.auth.token.email);
+        allow delete: if isAdmin(orgId);
+      }
+      
+      // ---------- Tools ----------
       match /tools/{toolId} {
         allow read: if isMember(orgId);
         allow write: if isAdmin(orgId);
@@ -83,25 +94,27 @@ service cloud.firestore {
         }
       }
       
-      // Settings subcollection
+      // ---------- Settings ----------
       match /settings/{settingId} {
         allow read: if isMember(orgId);
         allow write: if isAdmin(orgId);
       }
     }
     
-    // Invitations collection (for inviting members)
-    match /invitations/{inviteId} {
-      allow read: if isAuthenticated() && 
-        (resource.data.email == request.auth.token.email || 
-         isAdmin(resource.data.orgId));
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && 
-        (resource.data.email == request.auth.token.email || 
-         isAdmin(resource.data.orgId));
+    // ============================================
+    // Legacy collections (마이그레이션용)
+    // ============================================
+    match /organizations/{orgId} {
+      allow read, write: if isAuthenticated();
+      match /{document=**} {
+        allow read, write: if isAuthenticated();
+      }
     }
     
-    // Legacy queue collection (for backward compatibility during migration)
+    match /invitations/{inviteId} {
+      allow read, write: if isAuthenticated();
+    }
+    
     match /queue/{docId} {
       allow read, write: if isAuthenticated();
     }
