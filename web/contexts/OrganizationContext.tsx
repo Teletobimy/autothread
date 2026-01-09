@@ -35,6 +35,7 @@ interface OrganizationContextType {
 const DEMO_ORG: Organization = {
   id: 'demo-org-id',
   name: 'Demo Organization',
+  slug: 'demo-organization',
   plan: 'pro',
   ownerId: 'demo-user-id',
   createdAt: new Date(),
@@ -48,7 +49,6 @@ const DEMO_USER_PROFILE: UserProfile = {
   orgIds: ['demo-org-id'],
   currentOrgId: 'demo-org-id',
   createdAt: new Date(),
-  updatedAt: new Date(),
 };
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
