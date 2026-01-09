@@ -10,14 +10,27 @@ from google import genai as google_genai
 
 
 # System instruction for Threads content generation
-SYSTEM_INSTRUCTION = """당신은 소셜 미디어 콘텐츠 작성 전문가입니다.
+SYSTEM_INSTRUCTION = """당신은 Threads 소셜 미디어 게시물 작성 전문가입니다.
 
-중요한 규칙:
-1. 마크다운 문법을 절대 사용하지 마세요 (##, **, *, _, `, ``` 등)
-2. 순수 텍스트로만 작성하세요
-3. 이모지는 적절히 사용해도 됩니다
-4. 해시태그는 콘텐츠 끝에 자연스럽게 추가할 수 있습니다
-5. 500자 이내로 작성하세요 (Threads 최적 길이)
+절대적 규칙 (반드시 지켜야 함):
+1. 게시물 내용만 출력하세요. 다른 설명, 인사말, 코멘트는 절대 포함하지 마세요.
+2. "좋아", "알겠어", "~해볼게" 같은 도입부 금지
+3. "포인트:", "설명:", "---" 같은 부가 설명 금지
+4. 마크다운 문법 절대 금지 (##, **, *, _, `, ---, ``` 등)
+5. 순수 텍스트로만 작성
+6. 이모지는 적절히 사용 가능
+7. 해시태그는 콘텐츠 끝에 자연스럽게 추가 가능
+8. 500자 이내로 작성 (Threads 최적 길이)
+
+출력 예시 (이것만 출력):
+봄이 오고 있다
+
+길고 긴 겨울밤 차가운 그림자
+조용히 물러설 시간.
+새로운 시작의 속삭임,
+대지를 깨우네.
+
+#봄 #희망 #새로운시작
 """
 
 
@@ -67,17 +80,52 @@ class ContentGenerator:
         return self.generate(prompt)
 
     def _clean_content(self, content: str) -> str:
-        """Remove surrounding quotes and markdown formatting"""
+        """Remove surrounding quotes, markdown formatting, and unwanted sections"""
         # Remove surrounding quotes
         if content.startswith('"') and content.endswith('"'):
             content = content[1:-1]
         elif content.startswith("'") and content.endswith("'"):
             content = content[1:-1]
         
+        # Remove unwanted intro/outro sections
+        content = self._remove_unwanted_sections(content)
+        
         # Remove markdown formatting
         content = self._remove_markdown(content)
         
         return content.strip()
+    
+    def _remove_unwanted_sections(self, text: str) -> str:
+        """Remove AI intro/outro and explanations"""
+        lines = text.split('\n')
+        cleaned_lines = []
+        skip_mode = False
+        
+        for line in lines:
+            line_lower = line.strip().lower()
+            
+            # Skip intro lines
+            if any(intro in line_lower for intro in ['좋아', '알겠', '해볼게', '해 볼게', '작성해', '써볼게', '써 볼게']):
+                if len(line.strip()) < 50:  # Only skip if it's a short intro line
+                    continue
+            
+            # Start skipping at explanation sections
+            if any(marker in line_lower for marker in ['포인트:', '설명:', '참고:', 'point:', 'note:']):
+                skip_mode = True
+                continue
+            
+            # Skip horizontal rules and what follows them at the end
+            if line.strip() in ['---', '***', '___']:
+                # Check if this is near the end (last 30% of content)
+                current_pos = lines.index(line) if line in lines else 0
+                if current_pos > len(lines) * 0.7:
+                    skip_mode = True
+                continue
+            
+            if not skip_mode:
+                cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines)
     
     def _remove_markdown(self, text: str) -> str:
         """Remove markdown syntax from text"""
